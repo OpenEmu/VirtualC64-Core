@@ -25,7 +25,7 @@
 	<key>OEGameCorePlayerCount</key>
 	<string>2</string>
 	<key>OEProjectURL</key>
-	<string>http://sourceforge.net/projects/fceumm/</string>
+	<string>http://code.google.com/p/virtualc64/</string>
 	<key>OESystemIdentifiers</key>
 	<array>
 		<string>openemu.system.c64</string>
@@ -33,7 +33,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<string>1</string>
 	<key>SUFeedURL</key>
-	<string>http://openemu.org/updater/fceu_appcast.xml</string>
+	<string>http://openemu.org/updater/virtualc64_appcast.xml</string>
 	<key>SUPublicDSAKeyFile</key>
 	<string>dsa_pub.pem</string>
 </dict>

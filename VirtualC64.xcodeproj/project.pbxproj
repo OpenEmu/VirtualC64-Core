@@ -225,7 +225,7 @@
 		EB03DD0A16FE194000CF0752 /* VIC_colors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = VIC_colors.cpp; sourceTree = "<group>"; };
 		EB03DD0B16FE194000CF0752 /* VirtualComponent.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = VirtualComponent.cpp; sourceTree = "<group>"; };
 		EB03DD0C16FE194000CF0752 /* VirtualComponent.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = VirtualComponent.h; sourceTree = "<group>"; };
-		EB510EFD17931D6400138DC8 /* OEC64SystemResponderClient.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file; name = OEC64SystemResponderClient.h; path = "../OpenEmu/Commodore 64/OEC64SystemResponderClient.h"; sourceTree = "<group>"; };
+		EB510EFD17931D6400138DC8 /* OEC64SystemResponderClient.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = OEC64SystemResponderClient.h; path = "../OpenEmu/Commodore 64/OEC64SystemResponderClient.h"; sourceTree = "<group>"; };
 		EBFAC4E7170B6B2A00FA0136 /* OpenEmuBase.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenEmuBase.framework; path = "../../../Library/Developer/Xcode/DerivedData/OpenEmu-dmnjbgnffwkmncbbxtcmdxgyynaf/Build/Products/Debug/OpenEmuBase.framework"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
