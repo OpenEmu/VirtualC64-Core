@@ -1,0 +1,155 @@
+K 25
+svn:wc:ra_dav:version-url
+V 33
+/svn/!svn/ver/306/trunk/C64/resid
+END
+wave6581__ST.cc
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/306/trunk/C64/resid/wave6581__ST.cc
+END
+wave8580__ST.cc
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/306/trunk/C64/resid/wave8580__ST.cc
+END
+spline.h
+K 25
+svn:wc:ra_dav:version-url
+V 42
+/svn/!svn/ver/306/trunk/C64/resid/spline.h
+END
+pot.cc
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/!svn/ver/306/trunk/C64/resid/pot.cc
+END
+wave.cc
+K 25
+svn:wc:ra_dav:version-url
+V 41
+/svn/!svn/ver/306/trunk/C64/resid/wave.cc
+END
+pot.h
+K 25
+svn:wc:ra_dav:version-url
+V 39
+/svn/!svn/ver/306/trunk/C64/resid/pot.h
+END
+wave.h
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/!svn/ver/306/trunk/C64/resid/wave.h
+END
+voice.cc
+K 25
+svn:wc:ra_dav:version-url
+V 42
+/svn/!svn/ver/306/trunk/C64/resid/voice.cc
+END
+voice.h
+K 25
+svn:wc:ra_dav:version-url
+V 41
+/svn/!svn/ver/306/trunk/C64/resid/voice.h
+END
+wave6581_PST.cc
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/306/trunk/C64/resid/wave6581_PST.cc
+END
+envelope.cc
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/svn/!svn/ver/306/trunk/C64/resid/envelope.cc
+END
+wave8580_PST.cc
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/306/trunk/C64/resid/wave8580_PST.cc
+END
+extfilt.cc
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/!svn/ver/306/trunk/C64/resid/extfilt.cc
+END
+sid.cc
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/!svn/ver/306/trunk/C64/resid/sid.cc
+END
+envelope.h
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/!svn/ver/306/trunk/C64/resid/envelope.h
+END
+extfilt.h
+K 25
+svn:wc:ra_dav:version-url
+V 43
+/svn/!svn/ver/306/trunk/C64/resid/extfilt.h
+END
+sid.h
+K 25
+svn:wc:ra_dav:version-url
+V 39
+/svn/!svn/ver/306/trunk/C64/resid/sid.h
+END
+siddefs.h
+K 25
+svn:wc:ra_dav:version-url
+V 43
+/svn/!svn/ver/306/trunk/C64/resid/siddefs.h
+END
+filter.cc
+K 25
+svn:wc:ra_dav:version-url
+V 43
+/svn/!svn/ver/306/trunk/C64/resid/filter.cc
+END
+version.cc
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/!svn/ver/306/trunk/C64/resid/version.cc
+END
+filter.h
+K 25
+svn:wc:ra_dav:version-url
+V 42
+/svn/!svn/ver/306/trunk/C64/resid/filter.h
+END
+wave6581_PS_.cc
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/306/trunk/C64/resid/wave6581_PS_.cc
+END
+wave6581_P_T.cc
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/306/trunk/C64/resid/wave6581_P_T.cc
+END
+wave8580_PS_.cc
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/306/trunk/C64/resid/wave8580_PS_.cc
+END
+wave8580_P_T.cc
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/svn/!svn/ver/306/trunk/C64/resid/wave8580_P_T.cc
+END
