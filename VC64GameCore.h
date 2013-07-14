@@ -28,7 +28,6 @@
 #import <Cocoa/Cocoa.h>
 #import <OpenEmuBase/OEGameCore.h>
 
-
 #import <Cocoa/Cocoa.h>
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/glu.h>
@@ -44,4 +43,5 @@ OE_EXPORTED_CLASS
 {
     C64 *c64;
 }
+
 @end

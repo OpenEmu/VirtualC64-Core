@@ -41,12 +41,9 @@
     double sampleRate;
 }
 
-
 @end
-/*
-NSUInteger FCEUEmulatorValues[] = { SNES_DEVICE_ID_JOYPAD_UP, SNES_DEVICE_ID_JOYPAD_DOWN, SNES_DEVICE_ID_JOYPAD_LEFT, SNES_DEVICE_ID_JOYPAD_RIGHT, SNES_DEVICE_ID_JOYPAD_A, SNES_DEVICE_ID_JOYPAD_B, SNES_DEVICE_ID_JOYPAD_START, SNES_DEVICE_ID_JOYPAD_SELECT };
-NSString *FCEUEmulatorKeys[] = { @"Joypad@ Up", @"Joypad@ Down", @"Joypad@ Left", @"Joypad@ Right", @"Joypad@ A", @"Joypad@ B", @"Joypad@ Start", @"Joypad@ Select"};
-*/
+
+/*  ToDo:   Implements Inputs, SaveState, Sounds        */
 
 @implementation VC64GameCore
 
@@ -54,18 +51,35 @@ static VC64GameCore *current;
 static OERingBuffer *ringBuffer;
 
 #pragma mark VirtualC64: Input
-/*
-- (oneway void)didPushNESButton:(OEC64Button)button forPlayer:(NSUInteger)player;
+// ToDo
+- (void)mouseMoved:(OEIntPoint)location
 {
-//    pad[player - 1][FCEUEmulatorValues[button]] = 0xFFFF;
-    //pad[player - 1][FCEUEmulatorValues[button]] = 1;
+    //  ToDo
 }
-
-- (oneway void)didReleaseNESButton:(OEC64Button)button forPlayer:(NSUInteger)player;
+- (void)leftMouseDown
 {
-//    pad[player - 1][FCEUEmulatorValues[button]] = 0;
+    //  ToDo
 }
-*/
+- (void)leftMouseUp
+{
+    //  ToDo
+}
+- (void)rightMouseDown
+{
+    //  ToDo
+}
+- (void)rightMouseUp
+{
+    //  ToDo
+}
+- (void)keyUp:(unsigned short)keyCode
+{
+    //  ToDo
+}
+- (void)keyDown:(unsigned short)keyCode
+{
+    //  ToDo
+}
  
 #define u32 unsigned short
 #define BUFFERSIZE 2048
@@ -151,7 +165,7 @@ static OERingBuffer *ringBuffer;
                                                 stringByAppendingPathComponent:@"BIOS"]
                                                 stringByAppendingPathComponent:@"C1541.rom"];
     
-    // We've Basic, Kernel and Char ROMS and CP1541 Floppy ROM load them into c64
+    // We've Basic, Kernel and Char and CP1541 Floppy ROMS, load them into c64
     c64->loadRom([basicROM UTF8String]);
     c64->loadRom([kernelROM UTF8String]);
     c64->loadRom([charROM UTF8String]);
