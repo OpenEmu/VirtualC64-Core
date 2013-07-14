@@ -78,7 +78,7 @@ static OERingBuffer *ringBuffer;
 
  The C64 keyboard matrix:
  
-            0          1            2           3       4           5       6       7
+            0           1           2           3       4           5       6       7
  
  0          DEL         RETURN      CUR LR      F7      F1          F3      F5      CUR UD
  1          3           W           A           4       Z           S       E       LSHIFT
@@ -94,15 +94,14 @@ static OERingBuffer *ringBuffer;
 - (void)keyUp:(unsigned short)keyCode
 {
     //  ToDo
-    NSLog(@"KeyCode %d",keyCode);
-    c64->keyboard->releaseKey(5,2);
+    c64->keyboard->releaseKey([self MatrixRowForKeyCode:keyCode],[self MatrixColumnForKeyCode:keyCode]);
 }
 - (void)keyDown:(unsigned short)keyCode
 {
     //  ToDo
-    c64->keyboard->pressKey(5,2);
+    c64->keyboard->pressKey([self MatrixRowForKeyCode:keyCode],[self MatrixColumnForKeyCode:keyCode]);
 }
- 
+
 #define u32 unsigned short
 #define BUFFERSIZE 2048
 
@@ -346,5 +345,386 @@ NSString *fileToLoad;
     //ToDo: Implement
     return YES;
 }
+
+
+#pragma Misc & Helpers
+// Keyboard Matrix Helpers
+- (int)MatrixRowForKeyCode:(unsigned short)keyCode
+{
+    int row;
+    
+    switch (keyCode)
+    {
+            // A
+        case 0:
+            row = 1;
+            break;
+            // B
+        case 11:
+            row = 3;
+            break;
+            // C
+        case 8:
+            row = 2;
+            break;
+            // D
+        case 2:
+            row = 2;
+            break;
+            // E
+        case 14:
+            row = 1;
+            break;
+            // F
+        case 3:
+            row = 2;
+            break;
+            // G
+        case 5:
+            row = 3;
+            break;
+            // H
+        case 4:
+            row = 3;
+            break;
+            // I
+        case 34:
+            row = 4;
+            break;
+            // J
+        case 38:
+            row = 4;
+            break;
+            // K
+        case 40:
+            row = 4;
+            break;
+            // L
+        case 37:
+            row = 5;
+            break;
+            // M
+        case 46:
+            row = 1;
+            break;
+            // N
+        case 45:
+            row = 4;
+            break;
+            // O
+        case 31:
+            row = 4;
+            break;
+            // P
+        case 35:
+            row = 5;
+            break;
+            // Q
+        case 12:
+            row = 7;
+            break;
+            // R
+        case 15:
+            row = 2;
+            break;
+            // S
+        case 1:
+            row = 1;
+            break;
+            // T
+        case 17:
+            row = 2;
+            break;
+            // U
+        case 32:
+            row = 3;
+            break;
+            // V
+        case 9:
+            row = 3;
+            break;
+            // W
+        case 13:
+            row = 1;
+            break;
+            // X
+        case 7:
+            row = 2;
+            break;
+            // Y
+        case 6:
+            row = 3;
+            break;
+            // Z
+        case 16:
+            row = 1;
+            break;
+            // 1
+        case 18:
+        case 83:
+            row = 7;
+            break;
+            // 2
+        case 19:
+        case 84:
+            row = 7;
+            break;
+            // 3
+        case 20:
+        case 85:
+            row = 1;
+            break;
+            // 4
+        case 21:
+        case 86:
+            row = 1;
+            break;
+            // 5
+        case 23:
+        case 87:
+            row = 2;
+            break;
+            // 6
+        case 22:
+        case 88:
+            row = 2;
+            break;
+            // 7
+        case 26:
+        case 89:
+            row = 3;
+            break;
+            // 8
+        case 28:
+        case 91:
+            row = 3;
+            break;
+            // 9
+        case 25:
+        case 92:
+            row = 4;
+            break;
+            // 0
+        case 29:
+        case 82:
+            row = 4;
+            break;
+            // RETURN
+        case 36:
+        case 76:
+            row = 0;
+            break;
+            // SPACE
+        case 49:
+            row = 7;
+            break;
+            // HOME
+        case 115:
+            row = 6;
+            break;
+            // STOP
+        case 119:
+            row = 7;
+            break;
+            //...
+            /* ToDo: Special Keys like C= */
+            
+        default:
+            row=0;
+            break;
+    }
+    
+    return row;
+}
+
+- (int)MatrixColumnForKeyCode:(unsigned short)keyCode
+{
+    int row;
+    
+    switch (keyCode)
+    {
+            // A
+        case 0:
+            row = 2;
+            break;
+            // B
+        case 11:
+            row = 4;
+            break;
+            // C
+        case 8:
+            row = 4;
+            break;
+            // D
+        case 2:
+            row = 2;
+            break;
+            // E
+        case 14:
+            row = 6;
+            break;
+            // F
+        case 3:
+            row = 5;
+            break;
+            // G
+        case 5:
+            row = 2;
+            break;
+            // H
+        case 4:
+            row = 5;
+            break;
+            // I
+        case 34:
+            row = 1;
+            break;
+            // J
+        case 38:
+            row = 2;
+            break;
+            // K
+        case 40:
+            row = 5;
+            break;
+            // L
+        case 37:
+            row = 2;
+            break;
+            // M
+        case 46:
+            row = 4;
+            break;
+            // N
+        case 45:
+            row = 7;
+            break;
+            // O
+        case 31:
+            row = 6;
+            break;
+            // P
+        case 35:
+            row = 1;
+            break;
+            // Q
+        case 12:
+            row = 6;
+            break;
+            // R
+        case 15:
+            row = 1;
+            break;
+            // S
+        case 1:
+            row = 5;
+            break;
+            // T
+        case 17:
+            row = 6;
+            break;
+            // U
+        case 32:
+            row = 6;
+            break;
+            // V
+        case 9:
+            row = 7;
+            break;
+            // W
+        case 13:
+            row = 1;
+            break;
+            // X
+        case 7:
+            row = 7;
+            break;
+            // Y
+        case 6:
+            row = 1;
+            break;
+            // Z
+        case 16:
+            row = 4;
+            break;
+            // 1
+        case 18:
+        case 83:
+            row = 0;
+            break;
+            // 2
+        case 19:
+        case 84:
+            row = 3;
+            break;
+            // 3
+        case 20:
+        case 85:
+            row = 0;
+            break;
+            // 4
+        case 21:
+        case 86:
+            row = 3;
+            break;
+            // 5
+        case 23:
+        case 87:
+            row = 0;
+            break;
+            // 6
+        case 22:
+        case 88:
+            row = 3;
+            break;
+            // 7
+        case 26:
+        case 89:
+            row = 0;
+            break;
+            // 8
+        case 28:
+        case 91:
+            row = 3;
+            break;
+            // 9
+        case 25:
+        case 92:
+            row = 0;
+            break;
+            // 0
+        case 29:
+        case 82:
+            row = 3;
+            break;
+            // RETURN
+        case 36:
+        case 76:
+            row = 1;
+            break;
+            // SPACE
+        case 49:
+            row = 4;
+            break;
+            // HOME
+        case 115:
+            row = 3;
+            break;
+            // STOP
+        case 119:
+            row = 7;
+            break;
+            //...
+            /* ToDo: Special Keys like C= */
+            
+        default:
+            row=0;
+            break;
+    }
+    
+    return row;
+}
+
+
 
 @end
