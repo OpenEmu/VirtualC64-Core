@@ -43,7 +43,7 @@
 
 @end
 
-/*  ToDo:   Implements Inputs, SaveState, Sounds        */
+/*  ToDo:   Implements Inputs, SaveState, Sounds, also stopEmulation is broken        */
 
 @implementation VC64GameCore
 
@@ -72,13 +72,35 @@ static OERingBuffer *ringBuffer;
 {
     //  ToDo
 }
+
+/* 
+ The key is specified in the C64 row/column format:
+
+ The C64 keyboard matrix:
+ 
+            0          1            2           3       4           5       6       7
+ 
+ 0          DEL         RETURN      CUR LR      F7      F1          F3      F5      CUR UD
+ 1          3           W           A           4       Z           S       E       LSHIFT
+ 2          5           R           D           6       C           F       T       X
+ 3          7           Y           G           8       B           H       U       V
+ 4          9           I           J           0       M           K       O       N
+ 5          +           P           L           -       .           :       @       ,
+ 6          LIRA        *           ;           HOME    RSHIFT      =       ^       /
+ 7          1           <-          CTRL        2       SPACE       C=      Q       STOP
+ 
+*/
+
 - (void)keyUp:(unsigned short)keyCode
 {
     //  ToDo
+    NSLog(@"KeyCode %d",keyCode);
+    c64->keyboard->releaseKey(5,2);
 }
 - (void)keyDown:(unsigned short)keyCode
 {
     //  ToDo
+    c64->keyboard->pressKey(5,2);
 }
  
 #define u32 unsigned short
@@ -154,7 +176,7 @@ static OERingBuffer *ringBuffer;
     
     if (!c64->mem->isCharRom([charROM UTF8String]))
     {
-        NSLog(@"VirtualC64: %@ is not a valid Kernel ROM!", charROM);
+        NSLog(@"VirtualC64: %@ is not a valid Char ROM!", charROM);
         return NO;
     }
     
@@ -164,7 +186,7 @@ static OERingBuffer *ringBuffer;
                                                 stringByAppendingPathComponent:@"OpenEmu"]
                                                 stringByAppendingPathComponent:@"BIOS"]
                                                 stringByAppendingPathComponent:@"C1541.rom"];
-    
+        
     // We've Basic, Kernel and Char and CP1541 Floppy ROMS, load them into c64
     c64->loadRom([basicROM UTF8String]);
     c64->loadRom([kernelROM UTF8String]);
