@@ -28,11 +28,11 @@
 #import "VC64GameCore.h"
 #import <OpenEmuBase/OERingBuffer.h>
 #import <OpenEmuBase/OpenEmuBase.h>
-#import "OEC64SystemResponderClient.h"
+#import "OEComputerSystemResponderClient.h"
 #import <OpenGL/gl.h>
 
 
-@interface VC64GameCore () <OEC64SystemResponderClient>
+@interface VC64GameCore () <OEComputerSystemResponderClient>
 {
     uint16_t *videoBuffer;
     int videoWidth, videoHeight;
@@ -54,6 +54,7 @@ static VC64GameCore *current;
 static OERingBuffer *ringBuffer;
 
 #pragma mark VirtualC64: Input
+/*
 - (oneway void)didPushNESButton:(OEC64Button)button forPlayer:(NSUInteger)player;
 {
 //    pad[player - 1][FCEUEmulatorValues[button]] = 0xFFFF;
@@ -64,7 +65,8 @@ static OERingBuffer *ringBuffer;
 {
 //    pad[player - 1][FCEUEmulatorValues[button]] = 0;
 }
-
+*/
+ 
 #define u32 unsigned short
 #define BUFFERSIZE 2048
 
