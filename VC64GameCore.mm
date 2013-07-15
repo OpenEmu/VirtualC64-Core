@@ -96,12 +96,18 @@ static OERingBuffer *ringBuffer;
 
 - (void)keyUp:(unsigned short)keyCode
 {
-    //  ToDo
+    // Do not accept input before RUN
+    if (!didRUN)
+        return;
+    
     c64->keyboard->releaseKey([self MatrixRowForKeyCode:keyCode],[self MatrixColumnForKeyCode:keyCode]);
 }
 - (void)keyDown:(unsigned short)keyCode
 {
-    //  ToDo
+    // Do not accept input before RUN
+    if (!didRUN)
+        return;
+    
     c64->keyboard->pressKey([self MatrixRowForKeyCode:keyCode],[self MatrixColumnForKeyCode:keyCode]);
 }
 
