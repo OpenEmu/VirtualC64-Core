@@ -31,6 +31,9 @@
 #import "OEComputerSystemResponderClient.h"
 #import <OpenGL/gl.h>
 
+#define SAMPLERATE 44100
+#define SIZESOUNDBUFFER 44100 / 60 * 4
+
 
 @interface VC64GameCore () <OEComputerSystemResponderClient>
 {
@@ -195,24 +198,6 @@ static OERingBuffer *ringBuffer;
     return YES;
 }
 
-// Debug: KeyPresses Test
-- (void)sendKeyPress
-{
-    // See Keyboard Matrix in Keboyard.h
-    // Note: order is row,column
-    //       If you use the overloaded function to send a char it should be a small letter of the ascii table, ie 'a' not 'A'
-    
-    c64->keyboard->pressKey(5,2);
-    usleep(100000);
-    c64->keyboard->releaseKey(5,2);
-    
-    char Oh = 'o';
-    
-    c64->keyboard->pressKey(Oh);
-    usleep(100000);
-    c64->keyboard->releaseKey(Oh);
-}
-
 #pragma mark Exectuion
 
 - (void)executeFrame
@@ -336,16 +321,29 @@ NSString *fileToLoad;
 #pragma mark Save State
 - (BOOL)saveStateToFileAtPath:(NSString *)fileName
 {
-    //ToDo: Implement
+    c64->suspend();
+    
+    Snapshot *saveState = new Snapshot;
+    c64->saveToSnapshot(saveState);
+    saveState->writeToFile([fileName UTF8String]);
+    
+    c64->resume();
+    
     return YES;
 }
 
 - (BOOL)loadStateFromFileAtPath:(NSString *)fileName
 {
-    //ToDo: Implement
+    c64->suspend();
+    
+    Snapshot *saveState = new Snapshot;
+    saveState->readFromFile([fileName UTF8String]);
+    c64->loadFromSnapshot(saveState);
+    
+    c64->resume();
+    
     return YES;
 }
-
 
 #pragma Misc & Helpers
 // Keyboard Matrix Helpers
@@ -725,6 +723,23 @@ NSString *fileToLoad;
     return row;
 }
 
+// Debug: KeyPresses Test
+- (void)sendKeyPress
+{
+    // See Keyboard Matrix in Keboyard.h
+    // Note: order is row,column
+    //       If you use the overloaded function to send a char it should be a small letter of the ascii table, ie 'a' not 'A'
+    
+    c64->keyboard->pressKey(5,2);
+    usleep(100000);
+    c64->keyboard->releaseKey(5,2);
+    
+    char Oh = 'o';
+    
+    c64->keyboard->pressKey(Oh);
+    usleep(100000);
+    c64->keyboard->releaseKey(Oh);
+}
 
 
 @end
