@@ -31,8 +31,8 @@
 #import "OEComputerSystemResponderClient.h"
 #import <OpenGL/gl.h>
 
-#define SAMPLERATE 44100
-#define SIZESOUNDBUFFER 44100 / 60 * 4
+#define u32 unsigned short
+#define AUDIOBUFFERSIZE 2048
 
 
 @interface VC64GameCore () <OEComputerSystemResponderClient>
@@ -46,6 +46,9 @@
 }
 
 @end
+
+NSString *fileToLoad;
+BOOL didRUN = false;
 
 /*  ToDo:   Implements Inputs, SaveState, Sounds, also stopEmulation is broken        */
 
@@ -94,9 +97,6 @@ static OERingBuffer *ringBuffer;
     c64->keyboard->pressKey([self MatrixRowForKeyCode:keyCode],[self MatrixColumnForKeyCode:keyCode]);
 }
 
-#define u32 unsigned short
-#define AUDIOBUFFERSIZE 2048
-
 #pragma mark VirtualC64: Init
 - (id)init
 {
@@ -134,85 +134,11 @@ static OERingBuffer *ringBuffer;
     free(c64);
 }
 
-//  Helper methods to load the BIOS ROMS
-- (BOOL)loadTheBIOSRoms
-{
-    // Get The 4 BIOS ROMS
-    
-    // BASIC ROM
-    NSString *basicROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
-                                                stringByAppendingPathComponent:@"Application Support"]
-                                                stringByAppendingPathComponent:@"OpenEmu"]
-                                                stringByAppendingPathComponent:@"BIOS"]
-                                                stringByAppendingPathComponent:@"Basic.rom"];
-    
-    if (!c64->mem->isBasicRom([basicROM UTF8String]))
-    {
-        NSLog(@"VirtualC64: %@ is not a valid Basic ROM!", basicROM);
-        return NO;
-    }
-
-    // Kernel ROM
-    NSString *kernelROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
-                                                stringByAppendingPathComponent:@"Application Support"]
-                                                stringByAppendingPathComponent:@"OpenEmu"]
-                                                stringByAppendingPathComponent:@"BIOS"]
-                                                stringByAppendingPathComponent:@"Kernel.rom"];
-    
-    if (!c64->mem->isKernelRom([kernelROM UTF8String]))
-    {
-        NSLog(@"VirtualC64: %@ is not a valid Kernel ROM!", kernelROM);
-        return NO;
-    }
-    
-    // Char ROM
-    NSString *charROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
-                                                stringByAppendingPathComponent:@"Application Support"]
-                                                stringByAppendingPathComponent:@"OpenEmu"]
-                                                stringByAppendingPathComponent:@"BIOS"]
-                                                stringByAppendingPathComponent:@"Char.rom"];
-    
-    if (!c64->mem->isCharRom([charROM UTF8String]))
-    {
-        NSLog(@"VirtualC64: %@ is not a valid Char ROM!", charROM);
-        return NO;
-    }
-    
-    // C1541 aka Floppy ROM
-    NSString *C1541ROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
-                                                stringByAppendingPathComponent:@"Application Support"]
-                                                stringByAppendingPathComponent:@"OpenEmu"]
-                                                stringByAppendingPathComponent:@"BIOS"]
-                                                stringByAppendingPathComponent:@"C1541.rom"];
-        
-    // We've Basic, Kernel and Char and CP1541 Floppy ROMS, load them into c64
-    c64->loadRom([basicROM UTF8String]);
-    c64->loadRom([kernelROM UTF8String]);
-    c64->loadRom([charROM UTF8String]);
-    c64->loadRom([C1541ROM UTF8String]);
-    
-    return YES;
-}
-
 #pragma mark Exectuion
 
 - (void)executeFrame
 {
     [self executeFrameSkippingFrame:NO];
-}
-
-BOOL didRUN = false;
-
-- (BOOL)isC64ReadyToRUN
-{
-    // HACK: Wait until enough cycles have passed to assume we're at the prompt
-    // and ready to RUN whatever has been flashed ("flush") into memory
-    if (c64->getCycles() >= 2803451 && !didRUN)
-    {
-        return YES;
-    }
-    
-    return NO;
 }
 
 - (void)executeFrameSkippingFrame:(BOOL)skip
@@ -230,18 +156,16 @@ BOOL didRUN = false;
     
     if (didRUN)
     {
-    for (unsigned i = 0; i < AUDIOBUFFERSIZE; i++) {
-        float bytes = c64->sid->readData();
-        // Whatever
-        audioBuffer[i] = bytes * 100000.0;
-        //audioBuffer[i*2+1] = bytes * 100000.0;
-    }
-        
-    [[current ringBufferAtIndex:0] write:audioBuffer maxLength:AUDIOBUFFERSIZE];
+        for (unsigned i = 0; i < AUDIOBUFFERSIZE; i++)
+        {
+            float bytes = c64->sid->readData();
+            // Whatever
+            audioBuffer[i] = bytes * 100000.0;
+            //audioBuffer[i*2+1] = bytes * 100000.0;
+        }
+        [[current ringBufferAtIndex:0] write:audioBuffer maxLength:AUDIOBUFFERSIZE];
     }
 }
-
-NSString *fileToLoad;
 
 - (BOOL)loadFileAtPath:(NSString *)path
 {
@@ -258,6 +182,27 @@ NSString *fileToLoad;
         c64->resume();
     
     [super setPauseEmulation:pauseEmulation];
+}
+
+- (void)setupEmulation
+{
+    c64->run();
+}
+
+- (void)resetEmulation
+{
+    c64->reset();
+    didRUN = NO;
+    [super resetEmulation];
+}
+
+// ToDo: Fix, I probably forked up somewhere and managed to break stopEmulation (the GUI stop button actually pause)
+// pause/resume are working fine however
+- (void)stopEmulation
+{
+    c64->halt();
+    didRUN = NO;
+    [super stopEmulation];
 }
 
 #pragma mark Video
@@ -284,27 +229,6 @@ NSString *fileToLoad;
 - (BOOL)rendersToOpenGL
 {
     return false;
-}
-
-- (void)setupEmulation
-{
-    c64->run();
-}
-
-- (void)resetEmulation
-{
-    c64->reset();
-    didRUN = NO;
-    [super resetEmulation];
-}
-
-// ToDo: Fix, I probably forked up somewhere and managed to break stopEmulation (the GUI stop button actually pause)
-// pause/resume are working fine however
-- (void)stopEmulation
-{
-    c64->halt();
-    didRUN = NO;
-    [super stopEmulation];
 }
 
 #pragma mark Video & Audio format and size
@@ -367,6 +291,77 @@ NSString *fileToLoad;
 }
 
 #pragma Misc & Helpers
+- (BOOL)isC64ReadyToRUN
+{
+    // HACK: Wait until enough cycles have passed to assume we're at the prompt
+    // and ready to RUN whatever has been flashed ("flush") into memory
+    if (c64->getCycles() >= 2803451 && !didRUN)
+    {
+        return YES;
+    }
+    
+    return NO;
+}
+
+//  Helper methods to load the BIOS ROMS
+- (BOOL)loadTheBIOSRoms
+{
+    // Get The 4 BIOS ROMS
+    
+    // BASIC ROM
+    NSString *basicROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
+                                                stringByAppendingPathComponent:@"Application Support"]
+                                                stringByAppendingPathComponent:@"OpenEmu"]
+                                                stringByAppendingPathComponent:@"BIOS"]
+                                                stringByAppendingPathComponent:@"Basic.rom"];
+    
+    if (!c64->mem->isBasicRom([basicROM UTF8String]))
+    {
+        NSLog(@"VirtualC64: %@ is not a valid Basic ROM!", basicROM);
+        return NO;
+    }
+    
+    // Kernel ROM
+    NSString *kernelROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
+                                                 stringByAppendingPathComponent:@"Application Support"]
+                                                 stringByAppendingPathComponent:@"OpenEmu"]
+                                                 stringByAppendingPathComponent:@"BIOS"]
+                                                 stringByAppendingPathComponent:@"Kernel.rom"];
+    
+    if (!c64->mem->isKernelRom([kernelROM UTF8String]))
+    {
+        NSLog(@"VirtualC64: %@ is not a valid Kernel ROM!", kernelROM);
+        return NO;
+    }
+    
+    // Char ROM
+    NSString *charROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
+                                               stringByAppendingPathComponent:@"Application Support"]
+                                               stringByAppendingPathComponent:@"OpenEmu"]
+                                               stringByAppendingPathComponent:@"BIOS"]
+                                               stringByAppendingPathComponent:@"Char.rom"];
+    
+    if (!c64->mem->isCharRom([charROM UTF8String]))
+    {
+        NSLog(@"VirtualC64: %@ is not a valid Char ROM!", charROM);
+        return NO;
+    }
+    
+    // C1541 aka Floppy ROM
+    NSString *C1541ROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
+                                                stringByAppendingPathComponent:@"Application Support"]
+                                                stringByAppendingPathComponent:@"OpenEmu"]
+                                                stringByAppendingPathComponent:@"BIOS"]
+                                                stringByAppendingPathComponent:@"C1541.rom"];
+    
+    // We've Basic, Kernel and Char and CP1541 Floppy ROMS, load them into c64
+    c64->loadRom([basicROM UTF8String]);
+    c64->loadRom([kernelROM UTF8String]);
+    c64->loadRom([charROM UTF8String]);
+    c64->loadRom([C1541ROM UTF8String]);
+    
+    return YES;
+}
 
 /*
  The key is specified in the C64 row/column format:
