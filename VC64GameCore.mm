@@ -241,6 +241,16 @@ NSString *fileToLoad;
     return YES;
 }
 
+- (void)setPauseEmulation:(BOOL)pauseEmulation
+{
+    if(pauseEmulation)
+        c64->suspend();
+    else
+        c64->resume();
+    
+    [super setPauseEmulation:pauseEmulation];
+}
+
 #pragma mark Video
 - (const void *)videoBuffer
 {
@@ -275,6 +285,7 @@ NSString *fileToLoad;
 - (void)resetEmulation
 {
     c64->reset();
+    didRUN = NO;
     [super resetEmulation];
 }
 
