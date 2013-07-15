@@ -42,6 +42,7 @@
     int16_t pad[2][16];
     NSString *romName;
     double sampleRate;
+    UInt16 *audioBuffer;
 }
 
 @end
@@ -76,24 +77,6 @@ static OERingBuffer *ringBuffer;
     //  ToDo
 }
 
-/* 
- The key is specified in the C64 row/column format:
-
- The C64 keyboard matrix:
- 
-            0           1           2           3       4           5       6       7
- 
- 0          DEL         RETURN      CUR LR      F7      F1          F3      F5      CUR UD
- 1          3           W           A           4       Z           S       E       LSHIFT
- 2          5           R           D           6       C           F       T       X
- 3          7           Y           G           8       B           H       U       V
- 4          9           I           J           0       M           K       O       N
- 5          +           P           L           -       .           :       @       ,
- 6          LIRA        *           ;           HOME    RSHIFT      =       ^       /
- 7          1           <-          CTRL        2       SPACE       C=      Q       STOP
- 
-*/
-
 - (void)keyUp:(unsigned short)keyCode
 {
     // Do not accept input before RUN
@@ -112,7 +95,7 @@ static OERingBuffer *ringBuffer;
 }
 
 #define u32 unsigned short
-#define BUFFERSIZE 2048
+#define AUDIOBUFFERSIZE 2048
 
 #pragma mark VirtualC64: Init
 - (id)init
@@ -131,6 +114,13 @@ static OERingBuffer *ringBuffer;
         
         if (c64->isRunnable())
         {
+            
+            if(audioBuffer) free(audioBuffer);
+            
+            audioBuffer = (UInt16 *)malloc(AUDIOBUFFERSIZE * sizeof(UInt16));
+            memset(audioBuffer, 0, AUDIOBUFFERSIZE * sizeof(UInt16));
+            
+            
             NSLog(@"VirtualC64: We can run");
             return self;
         }
@@ -236,6 +226,19 @@ BOOL didRUN = false;
         c64->keyboard->typeRun();
         didRUN = YES;
     }
+    
+    
+    if (didRUN)
+    {
+    for (unsigned i = 0; i < AUDIOBUFFERSIZE; i++) {
+        float bytes = c64->sid->readData();
+        // Whatever
+        audioBuffer[i] = bytes * 100000.0;
+        //audioBuffer[i*2+1] = bytes * 100000.0;
+    }
+        
+    [[current ringBufferAtIndex:0] write:audioBuffer maxLength:AUDIOBUFFERSIZE];
+    }
 }
 
 NSString *fileToLoad;
@@ -322,7 +325,8 @@ NSString *fileToLoad;
 
 - (double)audioSampleRate
 {
-    return sampleRate ? sampleRate : 48000;
+    return c64->sid->getSampleRate();
+    //return sampleRate ? sampleRate : 48000;
 }
 
 - (NSTimeInterval)frameInterval
@@ -332,7 +336,7 @@ NSString *fileToLoad;
 
 - (NSUInteger)channelCount
 {
-    return 2;
+    return 1;
 }
 
 #pragma mark Save State
@@ -363,6 +367,25 @@ NSString *fileToLoad;
 }
 
 #pragma Misc & Helpers
+
+/*
+ The key is specified in the C64 row/column format:
+ 
+ The C64 keyboard matrix:
+ 
+ 0           1           2           3       4           5       6       7
+ 
+ 0          DEL         RETURN      CUR LR      F7      F1          F3      F5      CUR UD
+ 1          3           W           A           4       Z           S       E       LSHIFT
+ 2          5           R           D           6       C           F       T       X
+ 3          7           Y           G           8       B           H       U       V
+ 4          9           I           J           0       M           K       O       N
+ 5          +           P           L           -       .           :       @       ,
+ 6          LIRA        *           ;           HOME    RSHIFT      =       ^       /
+ 7          1           <-          CTRL        2       SPACE       C=      Q       STOP
+ 
+ */
+
 // Keyboard Matrix Helpers
 - (int)MatrixRowForKeyCode:(unsigned short)keyCode
 {
@@ -540,6 +563,10 @@ NSString *fileToLoad;
             // STOP
         case 119:
             row = 7;
+            break;
+            // F1
+        case 122:
+            row = 0;
             break;
             //...
             /* ToDo: Special Keys like C= */
@@ -728,6 +755,10 @@ NSString *fileToLoad;
             // STOP
         case 119:
             row = 7;
+            break;
+            // F1
+        case 122:
+            row = 5;
             break;
             //...
             /* ToDo: Special Keys like C= */
