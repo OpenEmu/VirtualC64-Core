@@ -26,10 +26,13 @@
  */
 
 #import "VC64GameCore.h"
-#import <OpenEmuBase/OERingBuffer.h>
-#import <OpenEmuBase/OpenEmuBase.h>
+
 #import "OEComputerSystemResponderClient.h"
+#import <OpenEmuBase/OERingBuffer.h>
 #import <OpenGL/gl.h>
+
+#include "C64.h"
+
 
 #define u32 unsigned short
 #define AUDIOBUFFERSIZE 2048
@@ -37,27 +40,21 @@
 
 @interface VC64GameCore () <OEComputerSystemResponderClient>
 {
+    C64 *c64;
+    
+    NSString *fileToLoad;
     uint16_t *videoBuffer;
-    int videoWidth, videoHeight;
-    int16_t pad[2][16];
-    NSString *romName;
-    double sampleRate;
-    UInt16 *audioBuffer;
+    uint16_t *audioBuffer;
+    int16_t   pad[2][16];
+    BOOL      didRUN;
 }
 
 @end
-
-NSString *fileToLoad;
-BOOL didRUN = false;
-
 /*  ToDo:   Implements Inputs, SaveState, Sounds, also stopEmulation is broken        */
 
 @implementation VC64GameCore
 
-static VC64GameCore *current;
-static OERingBuffer *ringBuffer;
-
-#pragma mark VirtualC64: Input
+#pragma mark Input
 // ToDo
 - (void)mouseMoved:(OEIntPoint)location
 {
@@ -83,7 +80,7 @@ static OERingBuffer *ringBuffer;
 - (void)keyUp:(unsigned short)keyCode
 {
     // Do not accept input before RUN
-    if (!didRUN)
+    if(!didRUN)
         return;
     
     c64->keyboard->releaseKey([self MatrixRowForKeyCode:keyCode],[self MatrixColumnForKeyCode:keyCode]);
@@ -91,50 +88,55 @@ static OERingBuffer *ringBuffer;
 - (void)keyDown:(unsigned short)keyCode
 {
     // Do not accept input before RUN
-    if (!didRUN)
+    if(!didRUN)
         return;
     
     c64->keyboard->pressKey([self MatrixRowForKeyCode:keyCode],[self MatrixColumnForKeyCode:keyCode]);
 }
 
-#pragma mark VirtualC64: Init
+#pragma mark Init
 - (id)init
 {
     if((self = [super init]))
     {
-        current = self;
-        
         c64 = new C64();
-        
-        // Todo: Should we determine region ?
-        c64->setPAL();
-        
-        if (![self loadTheBIOSRoms])
-            return nil;
-        
-        if (c64->isRunnable())
-        {
-            
-            if(audioBuffer) free(audioBuffer);
-            
-            audioBuffer = (UInt16 *)malloc(AUDIOBUFFERSIZE * sizeof(UInt16));
-            memset(audioBuffer, 0, AUDIOBUFFERSIZE * sizeof(UInt16));
-            
-            
-            NSLog(@"VirtualC64: We can run");
-            return self;
-        }
+
+        audioBuffer = (UInt16 *)malloc(AUDIOBUFFERSIZE * sizeof(UInt16));
+        memset(audioBuffer, 0, AUDIOBUFFERSIZE * sizeof(UInt16));
     }
     
-    return nil;
+    return self;
 }
 
 - (void)dealloc
 {
-    free(c64);
+    delete c64;
 }
 
-#pragma mark Exectuion
+#pragma mark Execution
+
+- (BOOL)loadFileAtPath:(NSString *)path
+{
+    fileToLoad = [[NSString alloc] initWithString:path];
+
+    // Todo: Should we determine region ?
+    c64->setPAL();
+
+    if(![self loadBIOSRoms])
+        return NO;
+
+    return YES;
+}
+
+- (void)setupEmulation
+{
+    // Power on sub components
+    c64->sid->run();
+
+    c64->cpu->clearErrorState();
+	c64->floppy->cpu->clearErrorState();
+	c64->restartTimer();
+}
 
 - (void)executeFrame
 {
@@ -144,7 +146,7 @@ static OERingBuffer *ringBuffer;
 - (void)executeFrameSkippingFrame:(BOOL)skip
 {
     // Lazy/Late Init, we need to send RUN when the system is ready
-    if ([self isC64ReadyToRUN])
+    if([self isC64ReadyToRUN])
     {
         c64->mountArchive(D64Archive::archiveFromArbitraryFile([fileToLoad UTF8String]));
         c64->flushArchive(D64Archive::archiveFromArbitraryFile([fileToLoad UTF8String]), 0);
@@ -152,29 +154,26 @@ static OERingBuffer *ringBuffer;
         c64->keyboard->typeRun();
         didRUN = YES;
     }
+
+    int cyclesToRun = c64->getCyclesPerFrame();
+
+    for(int i=0; i<cyclesToRun; ++i)
+        c64->executeOneCycle();
     
-    
-    if (didRUN)
+    if(didRUN)
     {
-        for (unsigned i = 0; i < AUDIOBUFFERSIZE; i++)
+        for(unsigned i = 0; i < AUDIOBUFFERSIZE; i++)
         {
             float bytes = c64->sid->readData();
             // Whatever
             audioBuffer[i] = bytes * 100000.0;
             //audioBuffer[i*2+1] = bytes * 100000.0;
         }
-        [[current ringBufferAtIndex:0] write:audioBuffer maxLength:AUDIOBUFFERSIZE];
+        [[self ringBufferAtIndex:0] write:audioBuffer maxLength:AUDIOBUFFERSIZE];
     }
 }
 
-- (BOOL)loadFileAtPath:(NSString *)path
-{
-    fileToLoad = [[NSString alloc] initWithString:path];
-
-    return YES;
-}
-
-- (void)setPauseEmulation:(BOOL)pauseEmulation
+/*- (void)setPauseEmulation:(BOOL)pauseEmulation
 {
     if(pauseEmulation)
         c64->suspend();
@@ -182,12 +181,7 @@ static OERingBuffer *ringBuffer;
         c64->resume();
     
     [super setPauseEmulation:pauseEmulation];
-}
-
-- (void)setupEmulation
-{
-    c64->run();
-}
+}*/
 
 - (void)resetEmulation
 {
@@ -208,30 +202,14 @@ static OERingBuffer *ringBuffer;
 #pragma mark Video
 - (const void *)videoBuffer
 {
-    if(c64->isRunning())
-    {
-        return c64->vic->screenBuffer();
-    }
-    
-    return NULL;
-}
-
-- (OEIntRect)screenRect
-{
-    return OEIntRectMake(0,0,(float)c64->vic->getTotalScreenWidth() ,(float)c64->vic->getTotalScreenHeight() );
+    return c64->vic->screenBuffer();
 }
 
 - (OEIntSize)bufferSize
 {
-    return OEIntSizeMake((float)c64->vic->getTotalScreenWidth() ,(float)c64->vic->getTotalScreenHeight() );
+    return OEIntSizeMake(c64->vic->getTotalScreenWidth() ,c64->vic->getTotalScreenHeight() );
 }
 
-- (BOOL)rendersToOpenGL
-{
-    return false;
-}
-
-#pragma mark Video & Audio format and size
 - (GLenum)pixelFormat
 {
     return GL_RGBA;
@@ -247,15 +225,15 @@ static OERingBuffer *ringBuffer;
     return GL_RGBA;
 }
 
+#pragma mark Audio
 - (double)audioSampleRate
 {
     return c64->sid->getSampleRate();
-    //return sampleRate ? sampleRate : 48000;
 }
 
 - (NSTimeInterval)frameInterval
 {
-    return c64->vic->PAL_REFRESH_RATE;
+    return c64->getFramesPerSecond();
 }
 
 - (NSUInteger)channelCount
@@ -264,6 +242,7 @@ static OERingBuffer *ringBuffer;
 }
 
 #pragma mark Save State
+/*
 - (BOOL)saveStateToFileAtPath:(NSString *)fileName
 {
     c64->suspend();
@@ -288,78 +267,57 @@ static OERingBuffer *ringBuffer;
     c64->resume();
     
     return YES;
-}
+}*/
 
-#pragma Misc & Helpers
+#pragma mark Misc & Helpers
 - (BOOL)isC64ReadyToRUN
 {
     // HACK: Wait until enough cycles have passed to assume we're at the prompt
     // and ready to RUN whatever has been flashed ("flush") into memory
     if (c64->getCycles() >= 2803451 && !didRUN)
-    {
         return YES;
-    }
-    
-    return NO;
+    else
+        return NO;
 }
 
 //  Helper methods to load the BIOS ROMS
-- (BOOL)loadTheBIOSRoms
+- (BOOL)loadBIOSRoms
 {
     // Get The 4 BIOS ROMS
-    
+
     // BASIC ROM
-    NSString *basicROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
-                                                stringByAppendingPathComponent:@"Application Support"]
-                                                stringByAppendingPathComponent:@"OpenEmu"]
-                                                stringByAppendingPathComponent:@"BIOS"]
-                                                stringByAppendingPathComponent:@"Basic.rom"];
-    
-    if (!c64->mem->isBasicRom([basicROM UTF8String]))
+    NSString *basicROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"Basic.rom"];
+    if(!c64->mem->isBasicRom([basicROM UTF8String]))
     {
         NSLog(@"VirtualC64: %@ is not a valid Basic ROM!", basicROM);
         return NO;
     }
-    
+
     // Kernel ROM
-    NSString *kernelROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
-                                                 stringByAppendingPathComponent:@"Application Support"]
-                                                 stringByAppendingPathComponent:@"OpenEmu"]
-                                                 stringByAppendingPathComponent:@"BIOS"]
-                                                 stringByAppendingPathComponent:@"Kernel.rom"];
-    
-    if (!c64->mem->isKernelRom([kernelROM UTF8String]))
+    NSString *kernelROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"Kernel.rom"];
+    if(!c64->mem->isKernelRom([kernelROM UTF8String]))
     {
         NSLog(@"VirtualC64: %@ is not a valid Kernel ROM!", kernelROM);
         return NO;
     }
-    
+
     // Char ROM
-    NSString *charROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
-                                               stringByAppendingPathComponent:@"Application Support"]
-                                               stringByAppendingPathComponent:@"OpenEmu"]
-                                               stringByAppendingPathComponent:@"BIOS"]
-                                               stringByAppendingPathComponent:@"Char.rom"];
-    
-    if (!c64->mem->isCharRom([charROM UTF8String]))
+    NSString *charROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"Char.rom"];
+    if(!c64->mem->isCharRom([charROM UTF8String]))
     {
         NSLog(@"VirtualC64: %@ is not a valid Char ROM!", charROM);
         return NO;
     }
-    
+
     // C1541 aka Floppy ROM
-    NSString *C1541ROM = [[[[[NSHomeDirectory() stringByAppendingPathComponent:@"Library"]
-                                                stringByAppendingPathComponent:@"Application Support"]
-                                                stringByAppendingPathComponent:@"OpenEmu"]
-                                                stringByAppendingPathComponent:@"BIOS"]
-                                                stringByAppendingPathComponent:@"C1541.rom"];
-    
+    NSString *C1541ROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"C1541.rom"];
+
     // We've Basic, Kernel and Char and CP1541 Floppy ROMS, load them into c64
     c64->loadRom([basicROM UTF8String]);
     c64->loadRom([kernelROM UTF8String]);
     c64->loadRom([charROM UTF8String]);
     c64->loadRom([C1541ROM UTF8String]);
-    
+
     return YES;
 }
 

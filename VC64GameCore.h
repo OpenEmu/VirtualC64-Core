@@ -28,20 +28,9 @@
 #import <Cocoa/Cocoa.h>
 #import <OpenEmuBase/OEGameCore.h>
 
-#import <Cocoa/Cocoa.h>
-#import <OpenGL/OpenGL.h>
-#import <OpenGL/glu.h>
-#import <Quartz/Quartz.h>
-
-#import "C64.h"
-
-
 @class OERingBuffer;
 
 OE_EXPORTED_CLASS
 @interface VC64GameCore : OEGameCore
-{
-    C64 *c64;
-}
 
 @end
