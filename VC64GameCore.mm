@@ -160,16 +160,17 @@
     for(int i=0; i<cyclesToRun; ++i)
         c64->executeOneCycle();
     
+    int audioBufferSize = c64->sid->getSampleRate() / c64->getFramesPerSecond();
+    
     if(didRUN)
     {
-        for(unsigned i = 0; i < AUDIOBUFFERSIZE; i++)
+        for(unsigned i = 0; i < audioBufferSize; i++)
         {
             float bytes = c64->sid->readData();
-            // Whatever
-            audioBuffer[i] = bytes * 100000.0;
-            //audioBuffer[i*2+1] = bytes * 100000.0;
+            bytes = bytes * 32767.0;
+            audioBuffer[i] = (UInt16)bytes;
         }
-        [[self ringBufferAtIndex:0] write:audioBuffer maxLength:AUDIOBUFFERSIZE];
+        [[self ringBufferAtIndex:0] write:audioBuffer maxLength:audioBufferSize * sizeof(UInt16)];
     }
 }
 
