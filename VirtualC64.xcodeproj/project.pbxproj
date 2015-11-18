@@ -143,6 +143,7 @@
 		8745D7721BFBD665005E8699 /* TAPArchive.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = TAPArchive.cpp; sourceTree = "<group>"; };
 		8745D7731BFBD665005E8699 /* TAPArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TAPArchive.h; sourceTree = "<group>"; };
 		8745D7751BFBD68F005E8699 /* VIC_constants.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VIC_constants.h; sourceTree = "<group>"; };
+		87FBC0891BFC780500AECF5A /* OEC64SystemResponderClient.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OEC64SystemResponderClient.h; path = "../OpenEmu/Commodore 64/OEC64SystemResponderClient.h"; sourceTree = "<group>"; };
 		8D5B49B6048680CD000E48DA /* VirtualC64.oecoreplugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VirtualC64.oecoreplugin; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D5B49B7048680CD000E48DA /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B5008DAD0E8BFB3E005AECAF /* VC64GameCore.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = VC64GameCore.h; sourceTree = "<group>"; };
@@ -233,7 +234,6 @@
 		EB03DD0916FE194000CF0752 /* VIC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = VIC.h; sourceTree = "<group>"; };
 		EB03DD0B16FE194000CF0752 /* VirtualComponent.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = VirtualComponent.cpp; sourceTree = "<group>"; };
 		EB03DD0C16FE194000CF0752 /* VirtualComponent.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = VirtualComponent.h; sourceTree = "<group>"; };
-		EB8932F017934FA100CE95EA /* OEComputerSystemResponderClient.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = OEComputerSystemResponderClient.h; path = ../OpenEmu/Computer/OEComputerSystemResponderClient.h; sourceTree = "<group>"; };
 		EBFAC4E7170B6B2A00FA0136 /* OpenEmuBase.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenEmuBase.framework; path = "../../../Library/Developer/Xcode/DerivedData/OpenEmu-dmnjbgnffwkmncbbxtcmdxgyynaf/Build/Products/Debug/OpenEmuBase.framework"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -282,7 +282,7 @@
 		08FB77AFFE84173DC02AAC07 /* Classes */ = {
 			isa = PBXGroup;
 			children = (
-				EB8932F017934FA100CE95EA /* OEComputerSystemResponderClient.h */,
+				87FBC0891BFC780500AECF5A /* OEC64SystemResponderClient.h */,
 				B5008DAD0E8BFB3E005AECAF /* VC64GameCore.h */,
 				B5008DAE0E8BFB3E005AECAF /* VC64GameCore.mm */,
 				EB03DCB216FE194000CF0752 /* C64 */,

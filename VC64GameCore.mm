@@ -27,25 +27,22 @@
 
 #import "VC64GameCore.h"
 
-#import "OEComputerSystemResponderClient.h"
+#import "OEC64SystemResponderClient.h"
 #import <OpenEmuBase/OERingBuffer.h>
 #import <OpenGL/gl.h>
 
 #include "C64.h"
 
 
-#define u32 unsigned short
 #define AUDIOBUFFERSIZE 2048
 
 
-@interface VC64GameCore () <OEComputerSystemResponderClient>
+@interface VC64GameCore () <OEC64SystemResponderClient>
 {
     C64 *c64;
-    
+
     NSString *fileToLoad;
-    uint16_t *videoBuffer;
     uint16_t *audioBuffer;
-    int16_t   pad[2][16];
     BOOL      didRUN;
 }
 
@@ -98,6 +95,24 @@
     c64->keyboard->pressKey([self MatrixRowForKeyCode:keyCode],[self MatrixColumnForKeyCode:keyCode]);
 }
 
+- (oneway void)didPushC64Button:(OEC64Button)button forPlayer:(NSUInteger)player;
+{
+    if(button == OEC64JoystickUp) { c64->joystick1->SetAxisY(JOYSTICK_AXIS_Y_UP); }
+    if(button == OEC64JoystickDown) { c64->joystick1->SetAxisY(JOYSTICK_AXIS_Y_DOWN); }
+    if(button == OEC64JoystickLeft) { c64->joystick1->SetAxisX(JOYSTICK_AXIS_X_LEFT); }
+    if(button == OEC64JoystickRight) { c64->joystick1->SetAxisX(JOYSTICK_AXIS_X_RIGHT); }
+    if(button == OEC64ButtonFire) { c64->joystick1->SetButtonPressed(true); }
+}
+
+- (oneway void)didReleaseC64Button:(OEC64Button)button forPlayer:(NSUInteger)player;
+{
+    if(button == OEC64JoystickUp) { c64->joystick1->SetAxisY(JOYSTICK_AXIS_NONE); }
+    if(button == OEC64JoystickDown) { c64->joystick1->SetAxisY(JOYSTICK_AXIS_NONE); }
+    if(button == OEC64JoystickLeft) { c64->joystick1->SetAxisX(JOYSTICK_AXIS_NONE); }
+    if(button == OEC64JoystickRight) { c64->joystick1->SetAxisX(JOYSTICK_AXIS_NONE); }
+    if(button == OEC64ButtonFire) { c64->joystick1->SetButtonPressed(false); }
+}
+
 #pragma mark Init
 - (id)init
 {
@@ -105,16 +120,17 @@
     {
         c64 = new C64();
 
-        audioBuffer = (UInt16 *)malloc(AUDIOBUFFERSIZE * sizeof(UInt16));
-        memset(audioBuffer, 0, AUDIOBUFFERSIZE * sizeof(UInt16));
+        audioBuffer = (uint16_t *)malloc(AUDIOBUFFERSIZE * sizeof(uint16_t));
+        memset(audioBuffer, 0, AUDIOBUFFERSIZE * sizeof(uint16_t));
     }
-    
+
     return self;
 }
 
 - (void)dealloc
 {
     delete c64;
+    free(audioBuffer);
 }
 
 #pragma mark Execution
@@ -139,7 +155,18 @@
 
     c64->cpu->clearErrorState();
 	c64->floppy->cpu->clearErrorState();
+    c64->floppy->setBitAccuracy(true); // Disable to put drive in a faster, but less compatible read-only mode
 	c64->restartTimer();
+    
+    // Peripherals
+    //[c64 setWarpLoad:[defaults boolForKey:VC64WarpLoadKey]];
+    //[[c64 vc1541] setSendSoundMessages:[defaults boolForKey:VC64DriveNoiseKey]];
+    
+    // Audio
+    //[c64 setReSID:[defaults boolForKey:VC64SIDReSIDKey]];
+    //[c64 setAudioFilter:[defaults boolForKey:VC64SIDFilterKey]];
+    //[c64 setChipModel:[defaults boolForKey:VC64SIDChipModelKey]];
+    //[c64 setSamplingMethod:[defaults boolForKey:VC64SIDSamplingMethodKey]];
 }
 
 - (void)executeFrame
@@ -190,9 +217,9 @@
         {
             float bytes = c64->sid->readData();
             bytes = bytes * 32767.0;
-            audioBuffer[i] = (UInt16)bytes;
+            audioBuffer[i] = (uint16_t)bytes;
         }
-        [[self ringBufferAtIndex:0] write:audioBuffer maxLength:audioBufferSize * sizeof(UInt16)];
+        [[self ringBufferAtIndex:0] write:audioBuffer maxLength:audioBufferSize * sizeof(uint16_t)];
     }
 }
 
@@ -210,7 +237,6 @@
 {
     c64->reset();
     didRUN = NO;
-    [super resetEmulation];
 }
 
 // ToDo: Fix, I probably forked up somewhere and managed to break stopEmulation (the GUI stop button actually pause)
