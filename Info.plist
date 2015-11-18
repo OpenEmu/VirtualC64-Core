@@ -28,7 +28,7 @@
 	<string>https://github.com/dirkwhoffmann/virtualc64</string>
 	<key>OESystemIdentifiers</key>
 	<array>
-		<string>openemu.system.computer</string>
+		<string>openemu.system.c64</string>
 	</array>
 	<key>SUEnableAutomaticChecks</key>
 	<string>1</string>
