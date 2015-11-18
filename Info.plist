@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>${EXECUTABLE_NAME}</string>
 	<key>CFBundleIconFile</key>
-	<string>VirtualC64X</string>
+	<string></string>
 	<key>CFBundleIdentifier</key>
 	<string>org.openemu.${PRODUCT_NAME:identifier}</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -17,7 +17,7 @@
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>1.0</string>
+	<string>1.3</string>
 	<key>NSPrincipalClass</key>
 	<string>OEGameCoreController</string>
 	<key>OEGameCoreClass</key>
@@ -25,7 +25,7 @@
 	<key>OEGameCorePlayerCount</key>
 	<string>2</string>
 	<key>OEProjectURL</key>
-	<string>http://code.google.com/p/virtualc64/</string>
+	<string>https://github.com/dirkwhoffmann/virtualc64</string>
 	<key>OESystemIdentifiers</key>
 	<array>
 		<string>openemu.system.computer</string>
@@ -33,8 +33,6 @@
 	<key>SUEnableAutomaticChecks</key>
 	<string>1</string>
 	<key>SUFeedURL</key>
-	<string>http://openemu.org/updater/virtualc64_appcast.xml</string>
-	<key>SUPublicDSAKeyFile</key>
-	<string>dsa_pub.pem</string>
+	<string>https://raw.github.com/OpenEmu/OpenEmu-Update/master/virtualc64_appcast.xml</string>
 </dict>
 </plist>

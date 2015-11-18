@@ -66,12 +66,9 @@ public:
 	//! Bring the CIA back to its initial state
 	void reset();
 	
-	//! Load state
-	void loadFromBuffer(uint8_t **buffer);
-	
-	//! Save state
-	void saveToBuffer(uint8_t **buffer);	
-	
+    //! Size of internal state
+    uint32_t stateSize();
+    
 	//! Dump internal state to console
 	void dumpState();	
 	

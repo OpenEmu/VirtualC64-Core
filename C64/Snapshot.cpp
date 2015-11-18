@@ -20,11 +20,42 @@
 
 Snapshot::Snapshot()
 {
-	dealloc();
+    header.magic[0] = 'V';
+    header.magic[1] = 'C';
+    header.magic[2] = '6';
+    header.magic[3] = '4';
+    header.major = V_MAJOR;
+    header.minor = V_MINOR;
+    header.subminor = V_SUBMINOR;
+    header.size = 0;
+    timestamp = (time_t)0;
+    state = NULL;
 }
 
 Snapshot::~Snapshot()
 {
+    dealloc();
+}
+
+void
+Snapshot::dealloc()
+{
+    if (state != NULL) {
+        free(state);
+        header.size = 0;
+    }
+}
+
+bool
+Snapshot::alloc(unsigned size)
+{
+    dealloc();
+    
+    if ((state = (uint8_t *)malloc(size)) == NULL)
+        return false;
+    
+    header.size = size;
+    return true;
 }
 
 Snapshot *
@@ -41,7 +72,7 @@ Snapshot::snapshotFromFile(const char *filename)
 }
 
 Snapshot *
-Snapshot::snapshotFromBuffer(const void *buffer, unsigned size)
+Snapshot::snapshotFromBuffer(const uint8_t *buffer, unsigned size)
 {
 	Snapshot *snapshot;
 	
@@ -53,74 +84,108 @@ Snapshot::snapshotFromBuffer(const void *buffer, unsigned size)
 	return snapshot;	
 }
 
-void 
-Snapshot::dealloc()
+ContainerType
+Snapshot::getType()
 {
-	fileContents.magic[0] = 'V';
-	fileContents.magic[1] = 'C';
-	fileContents.magic[2] = '6';
-	fileContents.magic[3] = '4';
-	fileContents.major = 1;
-	fileContents.minor = 0;
-	memset(fileContents.data, 0, sizeof(fileContents.data));
-
-	//size = 0;
-	timestamp = (time_t)0;
+    return V64_CONTAINER;
 }
 
 const char *
-Snapshot::getTypeOfContainer() 
+Snapshot::getTypeAsString() 
 {
 	return "V64";
+}
+
+bool
+Snapshot::isSnapshot(const char *filename)
+{
+    int magic_bytes[] = { 'V', 'C', '6', '4', EOF };
+    
+    assert(filename != NULL);
+    
+    if (!checkFileHeader(filename, magic_bytes))
+        return false;
+    
+    return true;
+}
+
+bool
+Snapshot::isSnapshot(const char *filename, int major, int minor, int subminor)
+{
+    int magic_bytes[] = { 'V', 'C', '6', '4', major, minor, subminor, EOF };
+    
+    assert(filename != NULL);
+    
+    if (!checkFileHeader(filename, magic_bytes))
+        return false;
+    
+    return true;
 }
 
 bool 
 Snapshot::fileIsValid(const char *filename)
 {
-	int magic_bytes[] = { 'V', 'C', '6', '4', EOF };
-	
-	assert(filename != NULL);
-	
-	if (!checkFileHeader(filename, magic_bytes))
-		return false;
-	
-	return true;
+    return Snapshot::isSnapshot(filename, V_MAJOR, V_MINOR, V_SUBMINOR);
 }
 
 bool 
-Snapshot::writeDataToFile(FILE *file, struct stat fileProperties)
-{	
-	// Write binary snapshot data
-	uint8_t *fc = (uint8_t *)&fileContents;
-	for (unsigned i = 0; i < sizeof(fileContents); i++) {
-		fputc((int)fc[i], file);
-	}
-	return true;	
-}
+Snapshot::readFromBuffer(const uint8_t *buffer, unsigned length)
+{
+    assert(buffer != NULL);
+    assert(length > sizeof(header));
 
-bool 
-Snapshot::readFromBuffer(const void *buffer, unsigned length)
-{	
-	if (length > sizeof(fileContents)) {
-		fprintf(stderr, "Snapshot image is too big %d\n", length);
-		return false;
-	}
-	
-	memcpy((void *)&fileContents, buffer, length);
-	return true;
-}
-
-bool 
-Snapshot::writeToBuffer(void *buffer)
-{	
-	assert(buffer != NULL);
-	
-	memcpy(buffer, (void *)&fileContents, sizeof(fileContents));
+    // Allocate memory
+    alloc(length - sizeof(header));
+    
+    // Copy header
+    memcpy((uint8_t *)&header, buffer, sizeof(header));
+    assert(header.size == length - sizeof(header));
+    
+    // Copy state data
+    memcpy(state, buffer + sizeof(header), length - sizeof(header));
+    
 	return true;
 }
 
 unsigned
-Snapshot::sizeOnDisk()
-{	
-	return sizeof(fileContents);
+Snapshot::writeToBuffer(uint8_t *buffer)
+{
+    assert(state != NULL);
+    
+    // Copy header
+    if (buffer)
+        memcpy(buffer, (uint8_t *)&header, sizeof(header));
+
+    // Copy state data
+    if (buffer)
+        memcpy(buffer + sizeof(header), state, header.size);
+
+    return sizeof(header) + header.size;
+}
+
+void
+Snapshot::takeScreenshot(uint32_t *buf, bool pal)
+{
+    unsigned x_start = (pal ? 23 : 20);
+    unsigned y_start = (pal ? 25 : 0);
+       
+    if (pal) {
+        x_start = PAL_LEFT_BORDER_WIDTH - 36;
+        y_start = PAL_UPPER_BORDER_HEIGHT - 34;
+        header.screenshot.width = 36 + PAL_CANVAS_WIDTH + 36;
+        header.screenshot.height = 34 + PAL_CANVAS_HEIGHT + 34;
+    } else {
+        x_start = NTSC_LEFT_BORDER_WIDTH - 42;
+        y_start = NTSC_UPPER_BORDER_HEIGHT - 9;
+        header.screenshot.width = 36 + PAL_CANVAS_WIDTH + 36;
+        header.screenshot.height = 9 + PAL_CANVAS_HEIGHT + 9;
+    }
+    
+    uint32_t *target = header.screenshot.screen;
+    buf += x_start + y_start * NTSC_PIXELS;
+    for (unsigned i = 0; i < header.screenshot.height; i++) {
+        memcpy(target, buf, header.screenshot.width * 4);
+        target += header.screenshot.width;
+        buf += NTSC_PIXELS;
+    }
 }

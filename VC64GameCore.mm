@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2009, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
 
 
  Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,10 @@
     BOOL      didRUN;
 }
 
+- (void)pressKey:(char)c;
+- (void)releaseKey:(char)c;
+- (void)typeText:(NSString *)text;
+- (void)typeText:(NSString *)text withDelay:(int)delay;
 @end
 /*  ToDo:   Implements Inputs, SaveState, Sounds, also stopEmulation is broken        */
 
@@ -56,7 +60,7 @@
 
 #pragma mark Input
 // ToDo
-- (void)mouseMoved:(OEIntPoint)location
+- (void)mouseMovedAtPoint:(OEIntPoint)location;
 {
     //  ToDo
 }
@@ -120,7 +124,7 @@
     fileToLoad = [[NSString alloc] initWithString:path];
 
     // Todo: Should we determine region ?
-    c64->setPAL();
+    c64->setNTSC();
 
     if(![self loadBIOSRoms])
         return NO;
@@ -140,28 +144,46 @@
 
 - (void)executeFrame
 {
-    [self executeFrameSkippingFrame:NO];
-}
-
-- (void)executeFrameSkippingFrame:(BOOL)skip
-{
     // Lazy/Late Init, we need to send RUN when the system is ready
     if([self isC64ReadyToRUN])
     {
-        c64->mountArchive(D64Archive::archiveFromArbitraryFile([fileToLoad UTF8String]));
-        c64->flushArchive(D64Archive::archiveFromArbitraryFile([fileToLoad UTF8String]), 0);
-        
-        c64->keyboard->typeRun();
+        if([[[fileToLoad pathExtension] lowercaseString] isEqualToString:@"d64"] ||
+           [[[fileToLoad pathExtension] lowercaseString] isEqualToString:@"p00"] ||
+           [[[fileToLoad pathExtension] lowercaseString] isEqualToString:@"prg"] ||
+           [[[fileToLoad pathExtension] lowercaseString] isEqualToString:@"t64"])
+        {
+            c64->mountArchive(D64Archive::archiveFromArbitraryFile([fileToLoad UTF8String]));
+            c64->flushArchive(D64Archive::archiveFromArbitraryFile([fileToLoad UTF8String]), 0);
+
+            [self typeText:@"RUN\n" withDelay:500000];
+        }
+        else if([[[fileToLoad pathExtension] lowercaseString] isEqualToString:@"tap"])
+        {
+            c64->insertTape(TAPArchive::archiveFromTAPFile([fileToLoad UTF8String]));
+
+            [self typeText:@"LOAD\n" withDelay:500000];
+
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                usleep(400000);
+                c64->datasette.pressPlay();
+            });
+        }
+        else if([[[fileToLoad pathExtension] lowercaseString] isEqualToString:@"crt"])
+        {
+            c64->attachCartridge(Cartridge::cartridgeFromFile([fileToLoad UTF8String]));
+            c64->reset();
+        }
+
         didRUN = YES;
     }
 
-    int cyclesToRun = c64->getCyclesPerFrame();
+    int cyclesToRun = c64->vic->getCyclesPerFrame();
 
     for(int i=0; i<cyclesToRun; ++i)
         c64->executeOneCycle();
-    
-    int audioBufferSize = c64->sid->getSampleRate() / c64->getFramesPerSecond();
-    
+
+    int audioBufferSize = c64->sid->getSampleRate() / c64->vic->getFramesPerSecond();
+
     if(didRUN)
     {
         for(unsigned i = 0; i < audioBufferSize; i++)
@@ -208,7 +230,18 @@
 
 - (OEIntSize)bufferSize
 {
-    return OEIntSizeMake(c64->vic->getTotalScreenWidth() ,c64->vic->getTotalScreenHeight() );
+    //return OEIntSizeMake(c64->vic->getTotalScreenWidth() ,c64->vic->getTotalScreenHeight() );
+    return OEIntSizeMake(NTSC_PIXELS, NTSC_RASTERLINES);
+}
+
+- (OEIntRect)screenRect
+{
+    return OEIntRectMake(0, 0, NTSC_PIXELS, NTSC_RASTERLINES);
+}
+
+- (OEIntSize)aspectSize
+{
+    return OEIntSizeMake(NTSC_PIXELS * (3.0/4.0), NTSC_RASTERLINES);
 }
 
 - (GLenum)pixelFormat
@@ -234,7 +267,7 @@
 
 - (NSTimeInterval)frameInterval
 {
-    return c64->getFramesPerSecond();
+    return c64->vic->getFramesPerSecond();
 }
 
 - (NSUInteger)channelCount
@@ -723,6 +756,66 @@
     }
     
     return row;
+}
+
+- (void)pressKey:(char)c
+{
+    c64->keyboard->pressKey(c);
+}
+
+- (void)releaseKey:(char)c
+{
+    c64->keyboard->releaseKey(c);
+}
+
+- (void)typeText:(NSString *)text
+{
+    [self typeText:text withDelay:0];
+}
+
+- (void)typeText:(NSString *)text withDelay:(int)delay
+{
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self _typeText:text withDelay:delay];
+    });
+}
+
+- (void)_typeText:(NSString *)text withDelay:(int)delay
+{
+    const unsigned MAXCHARS = 256;
+    const unsigned KEYDELAY = 27500;
+    unsigned i;
+
+    fprintf(stderr,"Typing: ");
+
+    usleep(delay);
+    for (i = 0; i < [text length] && i < MAXCHARS; i++) {
+
+        unichar uc = [text characterAtIndex:i];
+        char c = (char)uc;
+
+        if (isupper(c))
+            c = tolower(c);
+
+        fprintf(stderr,"%c",c);
+
+        usleep(KEYDELAY);
+        [self pressKey:c];
+        usleep(KEYDELAY);
+        [self releaseKey:c];
+    }
+
+    if (i != [text length]) {
+        // Abbreviate text by three dots
+        for (i = 0; i < 3; i++) {
+            [self pressKey:'.'];
+            usleep(KEYDELAY);
+            [self releaseKey:'.'];
+            usleep(KEYDELAY);
+        }
+    }
+
+    fprintf(stderr,"\n");
 }
 
 // Debug: KeyPresses Test

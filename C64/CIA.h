@@ -126,7 +126,6 @@ public:
 	//! Reference to the connected CPU. 
 	CPU *cpu;
 	
-	
 	//! Timer A counter
 	uint16_t counterA;
 	
@@ -205,24 +204,12 @@ public:
 	
 	//! Bring the CIA back to its initial state
 	void reset();
-
-	//! Load state
-	void loadFromBuffer(uint8_t **buffer);
-
-	//! Save state
-	void saveToBuffer(uint8_t **buffer);
-	
+    	
 	//! Dump internal state
 	void dumpState();	
 
 	//! Dump trace line
 	void dumpTrace();	
-
-	//! Bind the CIA chip to the specified virtual CPU.
-	void setCPU(CPU *c) { assert(cpu == NULL); cpu = c; }
-
-	//! Bind the CIA chip to the specified VIC chip.
-	void setVIC(VIC *v) { assert(vic == NULL); vic = v; }
 
 	//! Returns the value of data port A
 	inline uint8_t getDataPortA() { return peek(CIA_DATA_PORT_A); }
@@ -247,7 +234,12 @@ public:
 	
 	//! Sets the current value of the data port B direction register
 	inline void setDataPortDirectionB(uint8_t value) { DDRB = value; }
-		
+
+    //! Sets the current value of the FLAG pin
+    // void setFlagPin(uint8_t value);
+    void triggerRisingEdgeOnFlagPin();
+    void triggerFallingEdgeOnFlagPin();
+
 	//! Special peek function for the I/O memory range
 	/*! The peek function only handles those registers that are treated similarily by the CIA 1 and CIA 2 chip */
 	virtual uint8_t peek(uint16_t addr);
@@ -300,6 +292,12 @@ public:
 	//! Enable or disable "time of day" interrupts 
 	inline void setInterruptEnabledTOD(bool b) { if (b) ICR |= 0x04; else ICR &= (0xff-0x04); }
 
+    //! Returns true, if a negative edge on the FLAG pin triggers an interrupt
+    inline bool isInterruptEnabledFlg() { return ICR & 0x10; }
+    
+    //! Enable or disable interrupts on negative edges of the FLAG pin
+    inline void setInterruptEnabledFlg(bool b) { if (b) ICR |= 0x10; else ICR &= (0xff-0x10); }
+    
 	//
 	// Timer A
 	// 
@@ -513,8 +511,6 @@ private:
 	Keyboard *keyboard;
 	Joystick *joy[2];
 
-	bool bKeyboard[2];
-
 	void pollJoystick( Joystick *joy, int joyDevNo );
 
 	void raiseInterruptLine();
@@ -531,28 +527,7 @@ public:
 	
 	//! Bring the CIA back to its initial state
 	void reset();
-	
-	//! Bind the CIA chip to the specified keyboard.
-	void setKeyboard(Keyboard *k) { assert(keyboard == NULL); keyboard = k; }
-	
-	//! Bind the joystick port on the VIC chip to the specified joystick
-	void setJoystickToPort( int portNo, Joystick *j );
-	
-	//! Get the joysick mapped to port A
-	Joystick *getJoystickOnPortA() { return joy[0]; }
-	
-	//! Get the joystick mapped to port B
-	Joystick *getJoystickOnPortB() { return joy[1]; }
-
-	//! Bind the keyboard on the VIC chip to the specified game port
-	void setKeyboardToPort( int portNo, bool b );
-	
-	//! Return true, if the keyboard simulates the joystick on gameport A */
-	bool getKeyboardOnPortA() { return bKeyboard[0]; }
-	
-	//! Return true, if the keyboard simulates the joystick on gameport B */
-	bool getKeyboardOnPortB() { return bKeyboard[1]; }
-
+		
 	//! Returns true if the \a addr is located in the I/O range of the CIA 1 chip
 	static inline bool isCia1Addr(uint16_t addr) 
 		{ return (CIA1_START_ADDR <= addr && addr <= CIA1_END_ADDR); }
@@ -602,9 +577,6 @@ public:
 	
 	//! Bring the CIA back to its initial state
 	void reset();
-
-	//! Bind the CIA chip to the specified IEC bus.
-	void setIEC(IEC *i) { assert(iec == NULL); iec = i; }
 	
 	//! Returns true if the \a addr is located in the I/O range of the CIA 2 chip
 	static inline bool isCia2Addr(uint16_t addr) 

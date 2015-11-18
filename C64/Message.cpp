@@ -47,8 +47,8 @@ void MessageQueue::printMessage(Message *msg)
 		case MSG_VC1541_ATTACHED:
 			fprintf(stderr, "MSG_VC1541_ATTACHED");
 			break;
-		case MSG_VC1541_DISC:
-			fprintf(stderr, "MSG_VC_1541_DISC");
+		case MSG_VC1541_DISK:
+			fprintf(stderr, "MSG_VC_1541_DISK");
 			break;
 		case MSG_VC1541_LED:
 			fprintf(stderr, "MSG_VC1541_LED");
@@ -62,6 +62,18 @@ void MessageQueue::printMessage(Message *msg)
 		case MSG_CARTRIDGE:
 			fprintf(stderr, "MSG_CARTRIDGE");
 			break;
+        case MSG_JOYSTICK_ATTACHED:
+            fprintf(stderr, "MSG_JOYSTICK_ATTACHED");
+            break;
+        case MSG_JOYSTICK_REMOVED:
+            fprintf(stderr, "MSG_JOYSTICK_REMOVED");
+            break;
+        case MSG_PAL:
+            fprintf(stderr, "MSG_PAL");
+            break;
+        case MSG_NTSC:
+            fprintf(stderr, "MSG_NTSC");
+            break;
 		default:
 			assert(0);
 	}

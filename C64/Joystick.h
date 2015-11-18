@@ -1,5 +1,6 @@
 /*
- * (C) 2009 Benjamin Klein. All rights reserved.
+ * Authors: Benjamin Klein
+ *          Dirk Hoffmann
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +20,16 @@
 #ifndef JOYSTICK_H
 #define JOYSTICK_H
 
+enum JoystickDirection
+{
+    JOYSTICK_UP = 0,
+    JOYSTICK_DOWN,
+    JOYSTICK_LEFT,
+    JOYSTICK_RIGHT,
+    JOYSTICK_FIRE
+};
+
+// DEPRECATED
 enum JoystickAxisState
 {
 	JOYSTICK_AXIS_NONE = 0,
@@ -32,26 +43,33 @@ enum JoystickAxisState
 	JOYSTICK_AXIS_Y_NONE = 0
 };
 
-class Joystick
-{
-	public:
-		Joystick();
+class Joystick : public VirtualComponent {
+
+private:
+    
+    bool _buttonPressed;
+    JoystickAxisState _axisX;
+    JoystickAxisState _axisY;
+    
+public:
+
+    //! Constructor
+    Joystick();
+    
+    //! Destructor
+    ~Joystick();
+    
+    //! Dump internal state to console
+    void dumpState();
+
+    bool GetButtonPressed();
+	JoystickAxisState GetAxisX();
+	JoystickAxisState GetAxisY();
 		
-		bool IsActive();
-		bool GetButtonPressed();
-		JoystickAxisState GetAxisX();
-		JoystickAxisState GetAxisY();
-		
-		void SetActiveState( bool active );
-		void SetButtonPressed( bool pressed );
-		void SetAxisX( JoystickAxisState state );
-		void SetAxisY( JoystickAxisState state );
-		
-	private:
-		bool _active;
-		bool _buttonPressed;
-		JoystickAxisState _axisX;
-		JoystickAxisState _axisY;
+	void SetButtonPressed(bool pressed);
+	void SetAxisX(JoystickAxisState state);
+	void SetAxisY(JoystickAxisState state);
+
 };
 
 #endif

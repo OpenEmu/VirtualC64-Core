@@ -82,9 +82,9 @@ OldSID::~OldSID()
 }
 
 void
-OldSID::reset() 
+OldSID::reset()
 {
-	debug(2, "  Resetting SID...\n");
+    VirtualComponent::reset();
 
 	// set mastervolume to half amplitude
 	masterVolume = 0.5f;
@@ -146,12 +146,16 @@ OldSID::setClockFrequency(uint32_t frequency)
 	updateConstants();
 }
 
+uint32_t
+OldSID::stateSize()
+{
+    return sizeof(iomem);
+}
+
 void 
 OldSID::loadFromBuffer(uint8_t **buffer)
 {
-	debug(2, "  Loading SID state...\n");
-
-	// reset ringbuffer, buffer pointers, callback synchronisation mechanism, etc. 
+	// reset ringbuffer, buffer pointers, callback synchronisation mechanism, etc.
 	this->reset();
 	for (unsigned i = 0; i < sizeof(iomem); i++) 
 		poke(i,read8(buffer)); // poke will store this value in iomem[] beside other things
@@ -160,8 +164,6 @@ OldSID::loadFromBuffer(uint8_t **buffer)
 void
 OldSID::saveToBuffer(uint8_t **buffer)
 {
-	debug(2, "  Saving SID state...\n");
-
 	for (unsigned i = 0; i < sizeof(iomem); i++) 
 		write8(buffer, iomem[i]);
 }
@@ -236,11 +238,12 @@ OldSID::poke(uint16_t addr, uint8_t value)
 			voice[v].wave = (value & 0xF0);
 			
 			// set envelope state depending of gate flag
-			if ((value & 0x1) != voice[v].gate) // set only if value changes
+			if ((value & 0x1) != voice[v].gate) { // set only if value changes
 				if (value & 0x1) // gate turned on
 					voice[v].on(); // turn on
 				else // gate turned off
 					voice[v].off(); // turn off
+            }
 			// set gate flag
 			voice[v].gate = (value & 0x1); // bit 0
 			// sync flag
@@ -315,9 +318,7 @@ OldSID::poke(uint16_t addr, uint8_t value)
 	}
 }
 
-
-
-bool 
+void
 OldSID::execute(int elapsedCycles)
 {
 	// get filter coefficients, so the emulator won't change
@@ -408,22 +409,7 @@ OldSID::execute(int elapsedCycles)
 		this->callbackStarted = true;
 		this->startPlaying = true;
 	}
-	return true;
 }
-
-#if 0
-void 
-OldSID::run()
-{
-    debug("OldSID::run");
-}
-
-void 
-OldSID::halt()
-{
-    debug("OldSID::halt");
-}
-#endif
 
 // generate triangle waveform
 float OldSID::triangleWave(SIDVoice* voice)
@@ -732,12 +718,12 @@ void OldSID::computeFilter()
 		g2 += 0.1;
 
 	// Stabilize filter
-	if (fabs(g1) >= g2 + 1.0)
+	if (fabs(g1) >= g2 + 1.0) {
 		if (g1 > 0.0)
 			g1 = g2 + 0.99;
 		else
 			g1 = -(g2 + 0.99);
-
+    }
 	// Calculate roots (filter characteristic) and input attenuation
 	switch (f_type) {
 

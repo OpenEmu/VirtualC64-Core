@@ -1,5 +1,5 @@
 /*
- * (C) 2010 Dirk W. Hoffmann. All rights reserved.
+ * Author: Dirk W. Hoffmann, www.dirkwhoffmann.de
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,59 +21,119 @@
 
 #include "basic.h"
 
-//! Loadable object
+/*! @enum ContainerType
+    @brief The type of a container
+    @constant CRT_CONTAINER A cartridge that can be plugged into the expansion port.
+    @constant V64_CONTAINER A snapshot file (contains a frozen C64 state).
+    @constant T64_CONTAINER A tape archive with multiple files.
+    @constant D64_CONTAINER A floppy disk image with multiply files.
+    @constant PRG_CONTAINER A program archive containing a single file.
+    @constant P00_CONTAINER A program archive containing a single file.
+    @constant G64_CONTAINER A collection of bit-streams resembling a floppy disk.
+    @constant G64_CONTAINER A bit-stream resembling a datasette tape.
+    @constant FILE_CONTAINER An arbitrary file that is interpreted as raw data. */
+enum ContainerType {
+    CRT_CONTAINER = 1,
+    V64_CONTAINER,
+    T64_CONTAINER,
+    D64_CONTAINER,
+    PRG_CONTAINER,
+    P00_CONTAINER,
+    G64_CONTAINER,
+    TAP_CONTAINER,
+    FILE_CONTAINER
+};
+
+
+/*! @class Container
+    @brief Base class for all loadable objects. 
+    @discussion The class provides basic functionality for reading and writing files. */
 class Container {
-	
+
 private:
 	
-	//! Physical name of archive
-	char *path;
-	
-	//! Logical name of archive
-	char *name;
-		
-	//! Free allocated memory
-	virtual void dealloc() = 0;
-
-	//! Returns how many bytes are needed to store this container on disk
-	virtual unsigned sizeOnDisk();
+    //! @brief The physical name (full path name) of the archive.
+    char *path;
 	
 protected:
 
-	//! Check file type
-	/*! Returns true, iff the specified file is a valid file of this container type. */
-	virtual bool fileIsValid(const char *filename) = 0;
+    /*! @brief The logical name of the archive.
+        @discussion Some archives store a logical name in their header section. If they don't, the logical name is the raw filename (path and extension stripped off). */
+	char name[256];
+    
+    
+    //
+    //! @functiongroup Creating and destructing containers
+    //
 
 public:
-	
-	//! Constructor
-	Container();
-	
-	//! Destructor
-	virtual ~Container();
-			
-	//! Return physical name
-	 const char *getPath();
 
-	//! Return logical name (can be overwritten by sub classes)
-	virtual const char *getName();
+    //! @brief Standard constructor.
+    Container();
+
+    //! @brief Standard destructor.
+    virtual ~Container();
+
+    //! @brief Convert file name extension into numerical identifier
+    static ContainerType typeOf(const char *extension);
+    
+private:
+    
+    //! @brief Frees the memory allocated by this object.
+    virtual void dealloc() = 0;
+
+    //
+    //! @functiongroup Accessing container attributes
+    //
+
+public:
+    
+	//! @brief Returns the physical name.
+    const char *getPath() { return path ? path : ""; }
+
+    //! @brief Sets the physical name.
+    void setPath(const char *path);
+
+    //! @brief Returns the logical name.
+    virtual const char *getName() { return name; }
+
+    //! @brief Sets the logical name.
+    void setName(const char *name);
+
+    //! @brief Returns the type of this container.
+    virtual ContainerType getType() = 0;
+
+    /*! @brief Returns the type of this container object as plain text, e.g., "T64" or "D64".
+        @deprecated Use getType instead. */
+	virtual const char *getTypeAsString() = 0;
 	
-	//! Type of container in plain text (T64, D64, PRG, ...)
-	virtual const char *getTypeOfContainer() = 0;
+    
+    //
+    //! @functiongroup Serializing a container
+    //
+
+    //! @brief Returns true iff the specified file is a file of this container type.
+    virtual bool fileIsValid(const char *filename) = 0;
+
+    /*! @brief Read container contents from a memory buffer.
+        @param buffer The address of a binary representation in memory.
+        @param length The size of the binary representation. */
+	virtual bool readFromBuffer(const uint8_t *buffer, unsigned length) = 0;
 	
-	//! Read container data from memory buffer
-	virtual bool readFromBuffer(const void *buffer, unsigned length);
-	
-	//! Read container data from file
+    /*! @brief Read container contents from a file.
+        @param filename The name of a file containing a binary representation.
+        @discussion This function requires no custom implementation. It first reads in the file contents in memory and invokes readFromBuffer afterwards. */
 	bool readFromFile(const char *filename);
 
-	//! Write container data to memory buffer
-	virtual bool writeToBuffer(void *buffer);
+    /*! @brief Write container contents into a memory buffer.
+        @param buffer The address of the buffer in memory.
+        @discussion If a NULL pointer is passed in, a test run is performed. Test runs are performed to determine the size of the container on disk. */
+	virtual unsigned writeToBuffer(uint8_t *buffer);
 
-	//! Write container data to file
+    /*! @brief Write container contents to a file.
+        @param filename The name of a file to be written.
+        @discussion This function requires no custom implementation. t first invokes writeToBuffer and writes the data to disk afterwards. */
 	bool writeToFile(const char *filename);
-	
-	
 };
 
 #endif

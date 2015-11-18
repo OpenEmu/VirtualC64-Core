@@ -1,7 +1,12 @@
-/*
- * (C) 2006 Dirk W. Hoffmann. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
+/*!
+ * @header      VIA.h
+ * @author      Dirk W. Hoffmann, www.dirkwhoffmann.de
+ * @copyright   2008 - 2016 Dirk W. Hoffmann
+ * @brief       Declares VC1541 class
+ * @details     The implementation is mainly based on the document
+ *              "R6522 VERSATILE INTERFACE ADAPTER" by Frank Kontros [F. K.]
+ */
+/* This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
@@ -23,44 +28,47 @@
 
 class VC1541;
 
+/*! @brief   Virtual VIA6522 controller
+    @details The VC1541 drive contains two VIAs on its logic board.
+ */
 class VIA6522 : public VirtualComponent {
 	
 public:
 	
-	//! Reference to the connected disk drive. 
+	//! @brief Reference to the connected disk drive.
 	VC1541 *floppy;
 
 public:
 	
-	//! Peripheral ports
-	/*! The  R6522  VIA  has  two  8-bit  bidirectional  I/O ports (Port A and Port B)
-		and each port has two associated control lines. 
-		
-		Each  8-bit  peripheral  port  has  a Data Direction Register (DDRA, DDRB) for
-		specifying  whether  the  peripheral pins are to act as inputs or outputs. A 0
-		in  a  bit  of the Data Direction Register causes the corresponding peripheral
-		pin to act as an input. A 1 causes the pin to act as an output.
-
-		Each  peripheral  pin  is  also controlled  by  a  bit in the Output Register
-		(ORA,  ORB)  and  the Input Register (IRA, IRB). When the pin is programmed as
-		an  output,  the  voltage on the pin is controlled by the corresponding bit of
-		the  Output  Register.  A  1  in  the  Output Register causes the output to go
-		high,  and  a  0  causes the output to go low. Data may be written into Output
-		Register  bits  corresponding  to pins which are programmed as inputs. In this
-		case, however, the output signal is unaffected.
-	*/
+	//! @brief Peripheral ports
+	/*! @details 
+     * "The  R6522  VIA  has  two  8-bit  bidirectional  I/O ports (Port A and Port B)
+     *  and each port has two associated control lines.
+     *
+	 *	Each  8-bit  peripheral  port  has  a Data Direction Register (DDRA, DDRB) for
+	 * 	specifying  whether  the  peripheral pins are to act as inputs or outputs. A 0
+     *  in  a  bit  of the Data Direction Register causes the corresponding peripheral
+     *  pin to act as an input. A 1 causes the pin to act as an output.
+     *
+     *  Each  peripheral  pin  is  also controlled  by  a  bit in the Output Register
+	 *	(ORA,  ORB)  and  the Input Register (IRA, IRB). When the pin is programmed as
+	 *	an  output,  the  voltage on the pin is controlled by the corresponding bit of
+	 *	the  Output  Register.  A  1  in  the  Output Register causes the output to go
+	 * 	high,  and  a  0  causes the output to go low. Data may be written into Output
+	 *	Register  bits  corresponding  to pins which are programmed as inputs. In this
+	 *	case, however, the output signal is unaffected." [F. K.]
+     */
 	uint8_t ddra, ddrb;
-	uint8_t ora, orb;
 	uint8_t ira, irb;
+    uint8_t ora, orb;
 	
-protected:
-	
+// protected:
+public:
+    
 	//! VIA I/O Memory
 	/*! Whenever a value is poked to the VIA address space, it is stored here. */
 	uint8_t io[16];
-	
-private:
-	
+		
 	//! VIA timer 1
 	/*! Interval  Timer  T1  consists  of  two  8-bit latches and a 16-bit
 		counter.  The  latches store data which is to be loaded into the
@@ -72,7 +80,9 @@ private:
 		the  output  signal  on  a peripheral pin (PB7) each time it "times-out". Each
 		of these modes is discussed separately below.
 	*/
-	uint8_t t1_latch_lo, t1_latch_hi, t1_counter_lo, t1_counter_hi;
+
+    uint16_t t1;
+    uint8_t t1_latch_lo, t1_latch_hi;
 
 	//! VIA timer 2
 	/*! Timer  2  operates  as  an interval timer (in the "one-shot" mode only), or as
@@ -83,30 +93,37 @@ private:
 		(T2C-H).  The  counter  registers  act as a 16-bit counter which decrements at
 		02 rate.
 	*/
-	uint8_t t2_latch_lo, t2_counter_lo, t2_counter_hi;
-		
+    uint16_t t2;
+	uint8_t t2_latch_lo;
+	
+    //! Indicates that timer 1 or timer 2 has reached zero
+    bool t1_underflow;
+    bool t2_underflow;
+    
 public:	
 	//! Constructor
 	VIA6522();
 	
 	//! Destructor
 	~VIA6522();
-	
-	//! Bind components
-	void setDrive(VC1541 *d) { assert(floppy == NULL); floppy = d; }
-	
+		
 	//! Bring the VIA back to its initial state
 	void reset();
 
-	//! Pass control to the virtual VIA
-	/*! The VIA chip will be executed for the specified number of clock cycles. */
-	bool execute(int cycles); 
+    //! Dump debug information
+    void dumpState();
 
-	//! Load state
-	void loadFromBuffer(uint8_t **buffer);
-	
-	//! Save state
-	void saveToBuffer(uint8_t **buffer);	
+    //! Execute virtual VIA for one cycle
+    inline void execute() {
+        if (t1 || t1_underflow) executeTimer1();
+        if (t2 || t2_underflow) executeTimer2();
+    }
+
+    //! Execution function for timer 1
+    void executeTimer1();
+
+    //! Execution function for timer 2
+    void executeTimer2();
 	
 	//! Special peek function for the I/O memory range
 	/*! The peek function only handles those registers that are treated similarily by both VIA chips */
@@ -116,36 +133,98 @@ public:
 	/*! The poke function only handles those registers that are treated similarily by both VIA chips */
 	virtual void poke(uint16_t addr, uint8_t value);
 
-	//! Get 16 bit timer values
-	uint16_t getTimer1() { return ((uint16_t)t1_counter_hi << 8) | t1_counter_lo; }
-	uint16_t getTimer2() { return ((uint16_t)t2_counter_hi << 8) | t2_counter_lo; }
+    // -----------------------------------------------------------------------------------------------
+    //                                Internal Configuration
+    // -----------------------------------------------------------------------------------------------
 
-	//! Set 16 bit timer values
-	void setTimer1(uint16_t value) { t1_counter_hi = value >> 8; t1_counter_lo = value & 0xFF; }
-	void setTimer2(uint16_t value) { t2_counter_hi = value >> 8; t2_counter_lo = value & 0xFF; }			
+    //! Returns true iff timer 1 is in free-run mode (continous interrupts)
+    bool freeRunMode1() { return (io[0x0B] & 0x40) != 0; }
 
-	//! Reload timer from latched values
-	void reloadTimer1() { t1_counter_hi = t1_latch_hi; t1_counter_lo = t1_latch_lo; }
+    //! Check if input latching is enabled
+    bool inputLatchingEnabledA() { return (GET_BIT(io[0x0B],0)); }
+    bool inputLatchingEnabledB() { return (GET_BIT(io[0x0B],1)); }
 
-	//! Signal time out 
-	void signalTimeOut1() { io[0x0D] |= 0x40; }
-	void signalTimeOut2() { io[0x0D] |= 0x20; }
+    
+    // -----------------------------------------------------------------------------------------------
+    //                                        Ports
+    // -----------------------------------------------------------------------------------------------
 
-	inline void clearTimer1Indicator() { io[0x0D] &= (0xFF-0x40); }
-	inline void clearTimer2Indicator() { io[0x0D] &= (0xFF-0x20); }
+    //! Returns the current value on chip pin CA2
+    bool CA2() {
+        switch ((io[0xC] >> 1) & 0x07) {
+            case 6: return false; // LOW OUTPUT
+            case 7: return true; // HIGH OUTPUT
+            default:
+                warn("UNUSAL OPERATION MODE FOR CA2 DETECTED");
+                return false;
+        }
+    }
+    
+    // -----------------------------------------------------------------------------------------------
+    //                                   Interrupt handling
+    // -----------------------------------------------------------------------------------------------
 
-	//! Check if a time out will interrupt the CPU
-	bool timerInterruptEnabled1() { return (io[0x0E] & 0x40) != 0; }
-	bool timerInterruptEnabled2() { return (io[0x0E] & 0x20) != 0; }	
+    // Returns the value of the IRQ pin
+    // This method updates the IRQ pin of the connected CPU as a side effect and is therefore
+    // invoked on every change in register IFR or register IER.
+    bool IRQ();
 
-	//! Check if input latching is enabled
-	bool inputLatchingEnabledA() { return (io[0x0B] & 0x01) != 0; }
-	bool inputLatchingEnabledB() { return (io[0x0B] & 0x02) != 0; }	
-	void dumpState();
+    //
+    // |    7    |    6    |    5    |    4    |    3    |    2    |    1    |    0    |
+    // ---------------------------------------------------------------------------------
+    // |   IRQ   | Timer 1 | Timer 2 |   CB1   |   CB2   |Shift Reg|   CA1   |   CA2   |
+
+    // Timer 1 - Set by:     Time-out of T1
+    //           Cleared by: Read t1 low or write t1 high
+    
+    inline void setInterruptFlag_T1() { SET_BIT(io[0xD],6); IRQ(); }
+    inline void clearInterruptFlag_T1() { CLR_BIT(io[0xD],6); IRQ(); }
+
+    // Timer 2 - Set by:     Time-out of T2
+    //           Cleared by: Read t2 low or write t2 high
+    
+    inline void setInterruptFlag_T2() { SET_BIT(io[0xD],5); IRQ(); }
+    inline void clearInterruptFlag_T2() { CLR_BIT(io[0xD],5); IRQ(); }
+
+    // CB1 - Set by:     Active edge on CB1
+    //       Cleared by: Read or write to register 0 (ORB)
+    
+    inline void setInterruptFlag_CB1() { SET_BIT(io[0xD],4); IRQ(); }
+    inline void clearInterruptFlag_CB1() { CLR_BIT(io[0xD],4); IRQ(); }
+
+    // CB2 - Set by:     Active edge on CB2
+    //       Cleared by: Read or write to register 0 (ORB) (only if CB2 is not selected as "INDEPENDENT")
+    
+    inline void setInterruptFlag_CB2() { SET_BIT(io[0xD],3); IRQ(); }
+    inline void clearInterruptFlag_CB2() { CLR_BIT(io[0xD],3); IRQ(); }
+    inline bool CB2selectedAsIndependent() {
+        uint8_t b765 = (io[0xC] >> 5) & 0x07; return (b765 == 0x01) || (b765 == 0x03); }
+
+    // Shift register - Set by:     8 shifts completed
+    //                  Cleared by: Read or write to register 10 (0xA) (shift register)
+    
+    inline void setInterruptFlag_SR() { SET_BIT(io[0xD],2); IRQ(); }
+    inline void clearInterruptFlag_SR() { CLR_BIT(io[0xD],2); IRQ(); }
+
+    // CA1 - Set by:     Active edge on CA1
+    //       Cleared by: Read or write to register 1 (ORA)
+    
+    inline void setInterruptFlag_CA1() { SET_BIT(io[0x0D],1); IRQ(); }
+    inline void clearInterruptFlag_CA1() { CLR_BIT(io[0x0D],1); IRQ(); }
+
+    // CA2 - Set by:     Active edge on CA2
+    //       Cleared by: Read or write to register 1 (ORA) (only if CA2 is not selected as "INDEPENDENT")
+    
+    inline void setInterruptFlag_CA2() { SET_BIT(io[0xD],0); IRQ(); }
+    inline void clearInterruptFlag_CA2() { CLR_BIT(io[0xD],0); IRQ(); }
+    inline bool CA2selectedAsIndependent() {
+        uint8_t b321 = (io[0xC] >> 1) & 0x07; return (b321 == 0x01) || (b321 == 0x03); }
 };
 
 
-//! The first versatile interface adapter (VIA1)
+/*! @brief   First virtual VIA6522 controller
+ *  @details VIA1 serves as hardware interface between the VC1541 CPU and the IEC bus.
+ */
 class VIA1 : public VIA6522 {
 	
 public:
@@ -155,13 +234,17 @@ public:
 	
 	//! Destructor
 	~VIA1();
-
-	//! Bring the VIA back to its initial state
-	void reset();
-
+    
+    //! Execution function for timer 1
+    void executeTimer1();
+    
+    //! Execution function for timer 2
+    void executeTimer2();
+    
 	uint8_t peek(uint16_t addr);
 	void poke(uint16_t addr, uint8_t value);
 	
+    
 	inline bool atnInterruptsEnabled() { return io[0x0E] & 0x02; }
 	inline void indicateAtnInterrupt() { io[0x0D] |= 0x02; }
 	inline void clearAtnIndicator() { io[0x0D] &= (0xFF-0x02); }
@@ -177,10 +260,13 @@ public:
 	
 	//! Destructor
 	~VIA2();
-
-	//! Bring the VIA back to its initial state
-	void reset();
-
+    
+    //! Execution function for timer 1
+    void executeTimer1();
+    
+    //! Execution function for timer 2
+    void executeTimer2();
+    
 	uint8_t peek(uint16_t addr);
 	void poke(uint16_t addr, uint8_t value);
 
@@ -189,11 +275,10 @@ public:
 	bool engineRunning() { return (orb & 0x04) != 0; }
 	bool redLEDshining() { return (orb & 0x08) != 0; }
 
-	//! Set sync bit
-	void setSyncSignal(bool b) { if (b) orb |= 0x80; else orb &= 0x7F; }
-	
+    
 	bool overflowEnabled() { return (io[0x0C] & 0x02); }
-	bool isReadMode() { return (io[0x0C] & 0x20); }
+
+    void debug0xC();
 };
 
 #endif

@@ -16,22 +16,22 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _T64ARCHIVE_INC
-#define _T64ARCHIVE_INC
+#ifndef _G64ARCHIVE_INC
+#define _G64ARCHIVE_INC
 
 #include "Archive.h"
 
-/*! @class D64Archive
- *  @brief The D64Archive class declares the programmatic interface for a file in T64 format.
+/*! @class G64Archive
+ *  @brief The G64Archive class declares the programmatic interface for a file in G64 format.
  */
-class T64Archive : public Archive {
+class G64Archive : public Archive {
 
 private:	
 
     //! @brief The raw data of this archive.
     uint8_t *data;
 
-    //! @brief File size
+    //! @brief Size of G64 file
     int size;
 
     /*! @brief File pointer
@@ -39,33 +39,29 @@ private:
 	int fp;
 	
     /*! @brief End of file position
-        @discussion Maximum value for fp. Do we really need this? */
+        @discussion This value equals the last valid offset plus 1 */
 	int fp_eof;
 	
-	//! @brief Don't know. Do we really need this?
-	bool directoryItemIsPresent(int n);
-
 public:
 
     //
-    //! @functiongroup Creating and destructing T64 archives
+    //! @functiongroup Creating and destructing G64 archives
     //
     
     //! @brief Standard constructor.
-    T64Archive();
+    G64Archive();
     
     //! @brief Standard destructor.
-    ~T64Archive();
+    ~G64Archive();
 		
-    //! @brief Returns true iff the specified file is a T64 file
-    static bool isT64File(const char *filename);
+    //! @brief Returns true iff the specified file is a G64 file
+    static bool isG64File(const char *filename);
 
-    //! @brief Creates a T64 archive from a T64 file located on disk.
-    static T64Archive *archiveFromT64File(const char *filename);
+    //! @brief Creates a G64 archive from a G64 file located on disk.
+    static G64Archive *archiveFromG64File(const char *filename);
     
-    /*! @brief Creates a T64 archive from another archive.
-     @result A T64 archive that contains the first directory item of the other archive. */
-    static T64Archive *archiveFromArchive(Archive *otherArchive);
+    /*! @brief Creates a G64 archive from a virtual 5,25 floppy disk. */
+    // static T64Archive *archiveFromDisk(Disk525 *disk);
 
 
     //
@@ -75,8 +71,8 @@ public:
     void dealloc();
     
     const char *getName();
-    ContainerType getType() { return T64_CONTAINER; }
-    const char *getTypeAsString() { return "T64"; }
+    ContainerType getType() { return G64_CONTAINER; }
+    const char *getTypeAsString() { return "G64"; }
     
     bool fileIsValid(const char *filename);
     bool readFromBuffer(const uint8_t *buffer, unsigned length);
@@ -87,11 +83,12 @@ public:
     //
     
     int getNumberOfItems();
-    // int getSizeOfItem(int n);
+    int getStartOfItem(int n);
+    int getSizeOfItem(int n);
     
     const char *getNameOfItem(int n);
     const char *getTypeOfItem(int n);
-    uint16_t getDestinationAddrOfItem(int n);
+    uint16_t getDestinationAddrOfItem(int n) { return 0; }
     
     void selectItem(int n);
     int getByte();

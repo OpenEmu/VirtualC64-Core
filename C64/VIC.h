@@ -16,88 +16,65 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// Last review: 25.7.06
-
 #ifndef _VIC_INC
 #define _VIC_INC
 
 #include "VirtualComponent.h"
+#include "VIC_constants.h"
+#include "PixelEngine.h"
+
 
 // Forward declarations
-class C64;
 class C64Memory;
+class PixelEngine; 
 
 #define EXTRACT_RED(x)   ((x & 0xff000000) >> 24)
 #define EXTRACT_GREEN(x) ((x & 0x00ff0000) >> 16)
 #define EXTRACT_BLUE(x)  ((x & 0x0000ff00) >> 8)
 #define EXTRACT_ALPHA(x) (x & 0x000000ff)
 
+#define SPR0 0x01
+#define SPR1 0x02
+#define SPR2 0x04
+#define SPR3 0x08
+#define SPR4 0x10
+#define SPR5 0x20
+#define SPR6 0x40
+#define SPR7 0x80
 
-//! The virtual Video Controller
-/*! VIC is the video controller chip of the Commodore 64.
-	The VIC chip occupied the memory mapped I/O space from address 0xD000 to 0xD02E.
-*/
+/*! @brief      Virtual Video Controller (VICII)
+ *  @discussion VICII is the video controller chip of the Commodore 64.
+ *              VICII occupied the memory mapped I/O space from address 0xD000 to 0xD02E. */
 class VIC : public VirtualComponent {
+
+    friend class PixelEngine;
+    
+    //! Reference to the attached pixel engine (encapsulates drawing routines)
+    PixelEngine pixelEngine;
+    
+public:
+    
+    //! Dump current configuration into message queue
+    void ping();
 
 	// -----------------------------------------------------------------------------------------------
 	//                                     Constant definitions
 	// -----------------------------------------------------------------------------------------------
 	
 public:
-	enum ColorScheme {
-		CCS64           = 0x00,
-		VICE            = 0x01,
-		FRODO           = 0x02,
-		PC64            = 0x03,
-		C64S            = 0x04,
-		ALEC64          = 0x05,
-		WIN64           = 0x06,
-		C64ALIVE_0_9    = 0x07,
-		GODOT           = 0x08,
-		C64SALLY        = 0x09,
-		PEPTO           = 0x0A,
-		GRAYSCALE       = 0x0B
-	};
 	
-	//! Display mode
-	/*! The VIC chip supports five distinct display modes. The currently set display mode is 
-		determined by Bit 5 and Bit 6 of control register 1 and Bit 4 of control register 2.
-	*/
-	enum DisplayMode {
-		STANDARD_TEXT             = 0x00,
-		MULTICOLOR_TEXT           = 0x10,
-		STANDARD_BITMAP           = 0x20,
-		MULTICOLOR_BITMAP         = 0x30,
-		EXTENDED_BACKGROUND_COLOR = 0x40,
-		INVALID_DISPLAY_MODE      = 0x01
-	};
-
+    //! VIC II chip models
+    enum ChipModel {
+        MOS6567_NTSC = 0,
+        MOS6569_PAL = 1
+    };
+    
 	//! Screen geometry
-	/*! The VIC chip supports four different screen geometries. */
 	enum ScreenGeometry {
 		COL_40_ROW_25 = 0x01,
 		COL_38_ROW_25 = 0x02,
 		COL_40_ROW_24 = 0x03,
 		COL_38_ROW_24 = 0x04
-	};
-
-	enum Color {
-		BLACK   = 0x00,
-		WHITE   = 0x01,
-		RED     = 0x02,
-		CYAN    = 0x03,
-		PURPLE  = 0x04,
-		GREEN   = 0x05,
-		BLUE    = 0x06,
-		YELLOW  = 0x07,
-		LTBROWN = 0x08,
-		BROWN   = 0x09,
-		LTRED   = 0x0A,
-		GREY1   = 0x0B,
-		GREY2   = 0x0C,
-		LTGREEN = 0x0D,
-		LTBLUE  = 0x0E,
-		GREY3   = 0x0F
 	};
 		
 	//! Start address of the VIC I/O space
@@ -105,131 +82,40 @@ public:
 	
 	//! End address of the VIC I/O space
 	static const uint16_t VIC_END_ADDR = 0xD3FF;
-	
-	//! Widht of inner screen area in pixels
-	static const uint16_t SCREEN_WIDTH = 320;
-	
-	//! Height of inner screen area in pixels
-	static const uint16_t SCREEN_HEIGHT = 200;
-	
-	//! First column coordinate of inner screen area
-	static const uint16_t FIRST_X_COORD_OF_INNER_AREA = 24;  
-	
-	//! First row coordinate of inner screen area
-	static const uint16_t FIRST_Y_COORD_OF_INNER_AREA = 51;
-	
-	
-	// NTSC machines
-
-	//! Refresh rate in Hz
-	static const uint16_t NTSC_REFRESH_RATE = 60;
-
-	//! CPU cycles per rasterline
-	static const uint16_t NTSC_CYCLES_PER_RASTERLINE = 65;
-
-	//! Width of left border
-	static const uint16_t NTSC_LEFT_BORDER_WIDTH = 49; // ??? Needs verification
-	
-	//! Width of right border
-	static const uint16_t NTSC_RIGHT_BORDER_WIDTH = 49; // ??? Needs verification
-
-	//! Number of viewable pixels in one rasterline
-	static const uint16_t NTSC_VIEWABLE_PIXELS = 418;
-
-	//! Number of invisible lines above upper border (first visible line is ???) // Needs verification
-	static const uint16_t NTSC_UPPER_INVISIBLE = 28;  
-
-	//! Upper border height 
-	static const uint16_t NTSC_UPPER_BORDER_HEIGHT = 23; // Needs verification
-	
-	//! Lower border height
-	static const uint16_t NTSC_LOWER_BORDER_HEIGHT = 12; // Needs verification
-
-	//! Number of invisible lines below lower border (last visible line is ???) // Needs verification
-	static const uint16_t NTSC_LOWER_INVISIBLE = 0;  
-	
-	//! Number of viewable rasterlines
-	static const uint16_t NTSC_VIEWABLE_RASTERLINES = 235;
-
-	//! Total number of rasterlines, including invisible areas
-	static const uint16_t NTSC_RASTERLINES = 263;
-	
-	
-	// PAL machines
-	
-	//! Refresh rate in Hz
-	static const uint16_t PAL_REFRESH_RATE = 50;
-	
-	//! CPU cycles per rasterline
-	static const uint16_t PAL_CYCLES_PER_RASTERLINE = 63;
-		
-	//! Width of left border
-	static const uint16_t PAL_LEFT_BORDER_WIDTH = 46;
-
-	//! Width of right border
-	static const uint16_t PAL_RIGHT_BORDER_WIDTH = 36;
-	
-	//! Number of viewable pixels in one rasterline
-	static const uint16_t PAL_VIEWABLE_PIXELS = 402;
-	
-	//! Number of invisible lines above upper border (first visible line is 0x008)
-	static const uint16_t PAL_UPPER_INVISIBLE = 8;  
-
-	//! Upper border height 
-	static const uint16_t PAL_UPPER_BORDER_HEIGHT = 43;
-	
-	//! Lower border height
-	static const uint16_t PAL_LOWER_BORDER_HEIGHT = 49;
-	
-	//! Number of invisible lines below lower border (last visible line is 0x12B)
-	static const uint16_t PAL_LOWER_INVISIBLE = 12;  
-
-	//! Number of viewable rasterlines 
-	static const uint16_t PAL_VIEWABLE_RASTERLINES = 292;
-
-	//! Total number of rasterlines, including invisible areas
-	static const uint16_t PAL_RASTERLINES = 312;
-
-
-
-	
-
-
-	//! Maximum number of viewable rasterlines
-	static const uint16_t MAX_VIEWABLE_RASTERLINES = PAL_VIEWABLE_RASTERLINES;
-
-	//! Maximum number of viewable pixels per rasterline
-	static const uint16_t MAX_VIEWABLE_PIXELS = NTSC_VIEWABLE_PIXELS;
-	
-		
-	// -----------------------------------------------------------------------------------------------
-	//                                      Member variables
-	// -----------------------------------------------------------------------------------------------
-	
+		   
 private:
-	
-	//! Reference to the connected virtual C64
-	C64 *c64;
-	
+		
 	//! Reference to the connected CPU. 
 	CPU *cpu;
 	
 	//! Reference to the connected virtual memory
 	C64Memory *mem;
 	
-	
+
 	// -----------------------------------------------------------------------------------------------
-	//                                     Internal registers
+	//                                     Internal state
 	// -----------------------------------------------------------------------------------------------
+
+    //! Selected chip model (determines whether video mode is PAL or NTSC)
+    ChipModel chipModel;
+    
+    //! Indicates whether the currently drawn rasterline belongs to VBLANK area
+    bool vblank;
+    
+    //! Rasterline counter
+    /*! The rasterline counter is is usually incremented in cycle 1. The only exception is the
+        overflow condition which is handled in cycle 2 */
+    uint32_t yCounter;
+    
+	//! Internal x counter of the sequencer (sptrite coordinate system)
+	int16_t xCounter;
 	
-	//! Number of the next screen line to be drawn
-	/*! Right now, drawing to the border is not supported. Therefore, the value is always in the range
-	 from 0 to SCREEN_HEIGHT-1. */
-	uint32_t scanline;
-	
-	//! Internal x counter of the sequencer
-	uint16_t xCounter;
-	
+    //! Increase x counter by 8
+    inline void countX() { xCounter += 8; oldControlReg1 = iomem[0x11]; }
+
+    //! Returns true if yCounter needs to be reset to 0 in this rasterline
+    bool yCounterOverflow();
+    
 	//! Internal VIC register, 10 bit video counter
 	uint16_t registerVC;
 	
@@ -241,73 +127,120 @@ private:
 	
 	//! Internal VIC-II register, 6 bit video matrix line index
 	uint8_t registerVMLI; 
-		
+
+    //! Contents of control register 1 (0xD011) in previous cycle
+    uint8_t oldControlReg1;
+
+    //! DRAM refresh counter
+    /*! "In jeder Rasterzeile führt der VIC fünf Lesezugriffe zum Refresh des
+         dynamischen RAM durch. Es wird ein 8-Bit Refreshzähler (REF) zur Erzeugung
+         von 256 DRAM-Zeilenadressen benutzt." [C.B.] */
+    uint8_t refreshCounter;
+    
+    //! Address bus
+    /*! Whenever VIC performs a memory read, the generated memory address is stored here */
+    uint16_t addrBus;
+
+    //! Data bus
+    /*! Whenever VIC performs a memory read, the result is stored here */
+    uint8_t dataBus;
+    
+    //! Display mode in latest gAccess
+    uint8_t gAccessDisplayMode;
+    
+    //! Foreground color fetched in latest gAccess
+    uint8_t gAccessfgColor;
+
+    //! Background color fetched in latest gAccess
+    uint8_t gAccessbgColor;
+
 	//! Indicates that we are curretly processing a DMA line (bad line)
-	bool dmaLine;
+	bool badLineCondition;
 	
-	//! Determines, if DMA lines (bad lines) can occurr within the current frame
-	/*! The value of this flag is determined in rasterline 30, by checking Bit 4 of the VIC control register */
-	bool dmaLinesEnabled;
+	//! Determines, if DMA lines (bad lines) can occurr within the current frame.
+    /*! Bad lines can only occur, if the DEN bit was set during an arbitary cycle in rasterline 30
+	    The DEN bit is located in register 0x11 (CONTROL REGISTER 1) */
+    bool DENwasSetInRasterline30;
 
 	//! Display State
 	/*! The VIC is either in idle or display state */
 	bool displayState;
 
 	//! BA line
-	/*! The BA line can be pulled down by multiple sources. Each source is represented by a single bit.
-	 Hence, the BA is low, if at least one bit is 1, BA is high, if all bits are zero. */
+	/* Remember: Each CPU cycle is split into two phases
+           First phase (LOW):   VIC gets access to the bus
+           Second phase (HIGH): CPU gets access to the bus
+       In rare cases, VIC needs access in the HIGH phase, too. To block the CPU, the BA line is pulled down.
+       Note: The BA line can be pulled down by multiple sources (wired AND). */
 	uint16_t BAlow;
-		
-	//! Main frame Flipflop
+	
+    //! Remember at which cycle BA line has been pulled down
+    uint64_t BAwentLowAtCycle;
+    
+    //! cAccesses can only be performed is BA line is down for more than 2 cycles
+    bool BApulledDownForAtLeastThreeCycles();
+    
+    /* "Der VIC benutzt zwei Flipflops, um den Rahmen um das Anzeigefenster
+        herum zu erzeugen: Ein Haupt-Rahmenflipflop und ein vertikales
+        Rahmenflipflop. [...]
+
+        Die Flipflops werden nach den folgenden Regeln geschaltet:
+     
+        1. Erreicht die X-Koordinate den rechten Vergleichswert, wird das
+           Haupt-Rahmenflipflop gesetzt.
+        2. Erreicht die Y-Koordinate den unteren Vergleichswert in Zyklus 63, wird
+           das vertikale Rahmenflipflop gesetzt.
+        3. Erreicht die Y-Koordinate den oberern Vergleichswert in Zyklus 63 und
+           ist das DEN-Bit in Register $d011 gesetzt, wird das vertikale
+           Rahmenflipflop gelöscht.
+        4. Erreicht die X-Koordinate den linken Vergleichswert und die Y-Koordinate
+           den unteren, wird das vertikale Rahmenflipflop gesetzt.
+        5. Erreicht die X-Koordinate den linken Vergleichswert und die Y-Koordinate
+           den oberen und ist das DEN-Bit in Register $d011 gesetzt, wird das
+           vertikale Rahmenflipflop gelöscht.
+        6. Erreicht die X-Koordinate den linken Vergleichswert und ist das
+           vertikale Rahmenflipflop gelöscht, wird das Haupt-Flipflop gelöscht." [C.B.]
+     */
+
+	//! Main frame flipflop
 	bool mainFrameFF;
-	
-	//! Vertiacl frame Flipflop
-	bool verticalFrameFF;
-	
-	//! Vertical border on/off switch
-	bool drawVerticalFrame;
-	
-	//! Horizontal border on/off switch
-	bool drawHorizontalFrame;
-	
-	
+
+    //! Vertical frame Flipflop
+    bool verticalFrameFF;
+
+    //! Vertical frame flipflop set condition
+    /*! Indicates whether the vertical frame ff needs to be set in current rasterline */
+    bool verticalFrameFFsetCond;
+
+    //! Vertical frame flipflop clear condition
+    /*! Indicates whether the vertical frame ff needs to be cleared in current rasterline */
+    bool verticalFrameFFclearCond;
+
+    //! Takes care of the vertical frame flipflop value.
+    /*! Invoked in each VIC II cycle */
+    void checkVerticalFrameFF();
+    
+    //! Check frame fliplops at left border
+    void checkFrameFlipflopsLeft(uint16_t comparisonValue);
+
+    //! Check frame fliplops at right border
+    void checkFrameFlipflopsRight(uint16_t comparisonValue);
+
+    //! Comparison values for frame flipflops
+    inline uint16_t leftComparisonValue() { return isCSEL() ? 24 : 31; }
+    inline uint16_t rightComparisonValue() { return isCSEL() ? 344 : 335; }
+    inline uint16_t upperComparisonValue() { return isRSEL() ? 51 : 55; }
+    inline uint16_t lowerComparisonValue() { return isRSEL() ? 251 : 247; }
+    
+	//! Clear main frame flipflop
+    /*  "Das vertikale Rahmenflipflop dient zur Unterstützung bei der Darstellung
+         des oberen/unteren Rahmens. Ist es gesetzt, kann das Haupt-Rahmenflipflop
+         nicht gelöscht werden." [C.B.] */
+    inline void clearMainFrameFF() { if (!verticalFrameFF) mainFrameFF = false; }
+     
+    
 	// -----------------------------------------------------------------------------------------------
-	//                                        Screen parameters
-	// -----------------------------------------------------------------------------------------------
-
-private:
-	
-	// Current border width in pixels
-	unsigned leftBorderWidth, rightBorderWidth;
-	
-	// Current border height in pixels
-	unsigned upperBorderHeight, lowerBorderHeight;
-
-	// First and last visible rasterline
-	unsigned firstVisibleLine, lastVisibleLine;
-		
-	// Total width of visible screen (including border)
-	unsigned totalScreenWidth;
-
-	// Total height of visible screen (including border)
-	unsigned totalScreenHeight;
-
-	// Pixel aspect ratio (X:Y)
-	float pixelAspectRatio;
-
-public:
-
-	inline unsigned getFirstVisiblePixel() { return 0; }
-	inline unsigned getLastVisiblePixel() { return totalScreenWidth - 1; }	
-	inline unsigned getFirstVisibleLine() { return firstVisibleLine; }
-	inline unsigned getLastVisibleLine() { return lastVisibleLine; }
-	inline unsigned getTotalScreenWidth() {	return totalScreenWidth; }
-	inline unsigned getTotalScreenHeight() { return totalScreenHeight; }
-	inline float getPixelAspectRatio() { return pixelAspectRatio; }
-	
-	
-	// -----------------------------------------------------------------------------------------------
-	//                         I/O memory and temporary storage space
+	//                              I/O memory handling and RAM access
 	// -----------------------------------------------------------------------------------------------
 
 private:
@@ -316,133 +249,100 @@ private:
 	/*! If a value is poked to the VIC address space, it is stored here. */
 	uint8_t iomem[64]; 
 
-	//! Temporary space for display characters
-	/*! Every 8th rasterline, the VIC chips performs a DMA access and fills the array with the characters to display */
-	uint8_t characterSpace[40];
-	
-	//! Temporary space for display colors
-	/*! Every 8th rasterline, the VIC chips performs a DMA access and fills the array with the characters to display */
-	uint8_t colorSpace[40];
+    //! Start address of the currently selected memory bank
+    /*! There are four banks in total since the VIC chip can only "see" 16 KB of memory at one time
+        Two bank select bits in the CIA I/O space determine which quarter of the memory we're actually seeing
+     
+        \verbatim
+        +-------+------+-------+----------+-------------------------------------+
+        | VALUE | BITS |  BANK | STARTING |  VIC-II CHIP RANGE                  |
+        |  OF A |      |       | LOCATION |                                     |
+        +-------+------+-------+----------+-------------------------------------+
+        |   0   |  00  |   3   |   49152  | ($C000-$FFFF)                       |
+        |   1   |  01  |   2   |   32768  | ($8000-$BFFF)                       |
+        |   2   |  10  |   1   |   16384  | ($4000-$7FFF)                       |
+        |   3   |  11  |   0   |       0  | ($0000-$3FFF) (DEFAULT VALUE)       |
+        +-------+------+-------+----------+-------------------------------------+
+        \endverbatim 
+    */
+    uint16_t bankAddr;
 
-    //! Currently used color scheme
-    ColorScheme colorScheme;
+    //! General memory access via address and data bus
+    uint8_t memAccess(uint16_t addr);
+
+    //! Idle memory access at address 0x3fff
+    uint8_t memIdleAccess();
+
     
-	//! All 16 color codes in an array
-	uint32_t colors[16];
+// -----------------------------------------------------------------------------------------------
+//                                  Character access (cAccess)
+// -----------------------------------------------------------------------------------------------
+    
+    //! During a cAccess, VIC accesses the video matrix
+    void cAccess();
+    
+    //! cAcess character storage
+    /*! Every 8th rasterline, the VIC chips performs a DMA access and fills this array with 
+        character information */
+    uint8_t characterSpace[40];
+    
+    //! cAcess color storage
+    /*! Every 8th rasterline, the VIC chips performs a DMA access and fills the array with t
+        color information */
+    uint8_t colorSpace[40];
+    
+    
+// -----------------------------------------------------------------------------------------------
+//                                  Graphics access (gAccess)
+// -----------------------------------------------------------------------------------------------
 
-	//! First screen buffer
-	/*! The VIC chip writes it output into this buffer. The contents of the array is later copied into to
-	 texture RAM of your graphic card by the drawRect method in the OpenGL related code. */
-	int screenBuffer1[512 * 512];
-	
-	//! Second screen buffer
-	/*! The VIC chip uses double buffering. Once a frame is drawn, the VIC chip writes the next frame to the second buffer */
-	int screenBuffer2[512 * 512];
-	
-	//! Currently used screen buffer
-	/*! The variable points either to screenBuffer1 or screenBuffer2 */
-	int *currentScreenBuffer;
-	
-	//! Pixel buffer
-	/*! The pixel buffer is used for drawing a single line on the screen. When a sreen line is drawn, the pixels
-	 are first written in the pixel buffer. When the whole line is drawn, it is copied into the screen buffer.
-	 */
-	int *pixelBuffer;
-	
-	//! Z buffer
-	/*! The z Buffer is used for drawing a single line on the screen. A pixel is only written to the screen buffer,
-	 if it is closer to the view point. The depth of the closest pixel is kept in the z buffer. The lower the value
-	 of the z buffer, the closer it is to the viewer.
-	 The z buffer is cleared before a new rasterline is drawn.
-	 */
-	int zBuffer[MAX_VIEWABLE_PIXELS];
-	
-	//! Indicates the source of a drawn pixel
-	/*! Whenever a foreground pixel or sprite pixel is drawn, a distinct bit in the pixelSource array is set.
-	 The information is utilized to detect sprite-sprite and sprite-background collisions. 
-	 */
-	int pixelSource[MAX_VIEWABLE_PIXELS];
-	
-	//! Start address of the currently selected memory bank
-	/*! There are four banks in total since the VIC chip can only "see" 16 KB of memory at one time
-	 Two bank select bits in the CIA I/O space determine which quarter of the memory we're actually seeing
-	 
-	 \verbatim
-	 +-------+------+-------+----------+-------------------------------------+
-	 | VALUE | BITS |  BANK | STARTING |  VIC-II CHIP RANGE                  |
-	 |  OF A |      |       | LOCATION |                                     |
-	 +-------+------+-------+----------+-------------------------------------+
-	 |   0   |  00  |   3   |   49152  | ($C000-$FFFF)                       |
-	 |   1   |  01  |   2   |   32768  | ($8000-$BFFF)                       |
-	 |   2   |  10  |   1   |   16384  | ($4000-$7FFF)                       |
-	 |   3   |  11  |   0   |       0  | ($0000-$3FFF) (DEFAULT VALUE)       |
-	 +-------+------+-------+----------+-------------------------------------+
-	 \endverbatim
-	 */
-	uint16_t bankAddr;
-	
-	//! Start address of screen memory
-	/*! The screen memory stores the character codes to display
-	 The upper four bits of the VIC register 0xD018 determine where the screen memory starts (relative to the bank address):
-	 
-	 \verbatim
-	 +---------+------------+-----------------------------+
-	 |         |            |         LOCATION*           |
-	 |    A    |    BITS    +---------+-------------------+
-	 |         |            | DECIMAL |        HEX        |
-	 +---------+------------+---------+-------------------+
-	 |     0   |  0000XXXX  |      0  |  $0000            |
-	 |    16   |  0001XXXX  |   1024  |  $0400 (DEFAULT)  |
-	 |    32   |  0010XXXX  |   2048  |  $0800            |
-	 |    48   |  0011XXXX  |   3072  |  $0C00            |
-	 |    64   |  0100XXXX  |   4096  |  $1000            |
-	 |    80   |  0101XXXX  |   5120  |  $1400            |
-	 |    96   |  0110XXXX  |   6144  |  $1800            |
-	 |   112   |  0111XXXX  |   7168  |  $1C00            |
-	 |   128   |  1000XXXX  |   8192  |  $2000            |
-	 |   144   |  1001XXXX  |   9216  |  $2400            |
-	 |   160   |  1010XXXX  |  10240  |  $2800            |
-	 |   176   |  1011XXXX  |  11264  |  $2C00            |
-	 |   192   |  1100XXXX  |  12288  |  $3000            |
-	 |   208   |  1101XXXX  |  13312  |  $3400            |
-	 |   224   |  1110XXXX  |  14336  |  $3800            |
-	 |   240   |  1111XXXX  |  15360  |  $3C00            |
-	 +---------+------------+---------+-------------------+	
-	 \endverbatim
-	 */
-	uint16_t screenMemoryAddr;
-		
-	//! Start address of character memory
-	/*! The character memory stores the bitmaps for each character.
-	 The location of character memory is determined by VIC register 0xD018
-	 
-	 \verbatim
-	 +-----+----------+------------------------------------------------------+
-	 |VALUE|          |            LOCATION OF CHARACTER MEMORY*             |
-	 | of A|   BITS   +-------+----------------------------------------------+
-	 |     |          |DECIMAL|         HEX                                  |
-	 +-----+----------+-------+----------------------------------------------+
-	 |   0 | XXXX000X |     0 | $0000-$07FF                                  |
-	 |   2 | XXXX001X |  2048 | $0800-$0FFF                                  |
-	 |   4 | XXXX010X |  4096 | $1000-$17FF ROM IMAGE in BANK 0 & 2 (default)|
-	 |   6 | XXXX011X |  6144 | $1800-$1FFF ROM IMAGE in BANK 0 & 2          |
-	 |   8 | XXXX100X |  8192 | $2000-$27FF                                  |
-	 |  10 | XXXX101X | 10240 | $2800-$2FFF                                  |
-	 |  12 | XXXX110X | 12288 | $3000-$37FF                                  |
-	 |  14 | XXXX111X | 14336 | $3800-$3FFF                                  |
-	 +-----+----------+-------+----------------------------------------------+
-	 \endverbatim
-	 */
-	uint16_t characterMemoryAddr;
-		
-	//! True, iff character data is read from ROM space
-	bool characterMemoryMappedToROM;
-	
-	//! Physical start address of the character memory.
-	/*! The variable can point into the RAM or ROM of the virtual machine.
-	 The physical memory address is stored only to improve efficiency. */
-	// uint8_t *characterMemory;
-	
+    //! During a 'g access', VIC reads graphics data (character or bitmap patterns)
+    /*! The result of the gAccess is stored in variables prefixed with 'g_' */
+    void gAccess();
+    
+    //! Data value grabbed in gAccess()
+    uint8_t g_data;
+    
+    //! Character value grabbed in gAccess()
+    uint8_t g_character;
+    
+    //! Color value grabbed in gAccess()
+    uint8_t g_color;
+    
+    //! Display mode grabbed in gAccess()
+    DisplayMode g_mode;
+    
+    
+    // -----------------------------------------------------------------------------------------------
+    //                             Sprite accesses (pAccess and sAccess)
+    // -----------------------------------------------------------------------------------------------
+    
+    //! Sprite pointer access
+    void pAccess(int sprite);
+    
+    //! First sprite data access
+    /*!  Returns true iff sprite data was fetched (a memory access has occurred) */
+    bool sFirstAccess(int sprite);
+
+    //! Second sprite data access
+    /*!  Returns true iff sprite data was fetched (a memory access has occurred) */
+    bool sSecondAccess(int sprite);
+
+    //! Third sprite data access
+    /*!  Returns true iff sprite data was fetched (a memory access has occurred) */
+    bool sThirdAccess(int sprite);
+
+    
+    // -----------------------------------------------------------------------------------------------
+    //                           Memory refresh accesses (rAccess)
+    // -----------------------------------------------------------------------------------------------
+    
+    //! Performs a DRAM refresh
+    inline void rAccess() { (void)memAccess(0x3F00 | refreshCounter--); }
+    
+    //! Performs a DRAM idle access
+    inline void rIdleAccess() { (void)memIdleAccess(); }
+    
 
 	// -----------------------------------------------------------------------------------------------
 	//                                         Sprites
@@ -455,11 +355,7 @@ private:
 	//! MCBASE register
 	/*! MOB data counter (6 bit counter). One register for each sprite */
 	uint8_t mcbase[8];
-	
-	//! Sprite data shift registers
-	/*! The VIC chip has a 24 bit (3 byte) shift register for each sprite. It stores the sprite data for each rasterline */
-	uint8_t spriteShiftReg[8][3];
-	
+		
 	//! Sprite pointer
 	/*! Determines where the sprite data comes from */
 	uint16_t spritePtr[8];
@@ -469,6 +365,7 @@ private:
 	uint8_t spriteOnOff;
 	
 	//! Previous value of spriteOnOff
+    //  DEPRECATED. WILL BE ELIMINATED WHEN SPRITE DRAWING IS CYCLE BASED
 	uint8_t oldSpriteOnOff; 
 	
 	//! Sprite DMA on off
@@ -478,6 +375,10 @@ private:
 	//! Expansion flipflop
 	/*! Used to handle Y sprite stretching. One bit for each sprite */
 	uint8_t expansionFF;
+
+    //! Remembers which bits the CPU has cleared in the expansion Y register (D017)
+    /*! This value is set in pokeIO and cycle 15 and read in cycle 16 */
+    uint8_t cleared_bits_in_d017;
 	
 				
 	// -----------------------------------------------------------------------------------------------
@@ -525,11 +426,6 @@ private:
 	    Note that partial DMA lines may not appear. */	
 	bool markDMALines;
 
-	//! mark rasterline for debugging
-	/*! If set to a positive value, the specific rasterline is highlighted. The feature is intended for 
-	    debugging purposes, only */
-	int rasterlineDebug[MAX_VIEWABLE_RASTERLINES];
-
 	
 	// -----------------------------------------------------------------------------------------------
 	//                                             Methods
@@ -543,144 +439,53 @@ public:
 	//! Destructor
 	~VIC();
 	
-	//! Get screen buffer
-	inline void *screenBuffer() { return (currentScreenBuffer == screenBuffer1) ? screenBuffer2 : screenBuffer1; }
-
-	//! Get current screen buffer (DEPRECATED)
-	// inline void *getCurrentScreenBuffer() { return currentScreenBuffer; }
+	//! Get screen buffer that is currently stable
+    inline void *screenBuffer() { return pixelEngine.screenBuffer(); }
 
 	//! Reset the VIC chip to its initial state
 	void reset();
-	
-	//! Load state
-	void loadFromBuffer(uint8_t **buffer);
-	
-	//! Save state
-	void saveToBuffer(uint8_t **buffer);	
-	
+		
 	//! Dump internal state to console
 	void dumpState();	
 	
+    
 	// -----------------------------------------------------------------------------------------------
 	//                                         Configuring
 	// -----------------------------------------------------------------------------------------------
 	
 public:
 	
-	//! Configure the VIC chip for PAL video output
-	void setPAL();
-	
-	//! Configure the VIC chip for NTSC video output
-	void setNTSC();	
+    //! Returns true iff virtual vic is running in PAL mode
+    inline bool isPAL() { return chipModel == MOS6569_PAL; }
 
-    //! Get color scheme
-	ColorScheme getColorScheme() { return colorScheme; }
+	//! Get chip model
+    inline ChipModel getChipModel() { return chipModel; }
 
-	//! Set color scheme
-	void setColorScheme(ColorScheme scheme);
+    //! Set chip model
+    void setChipModel(ChipModel model);
 	
     //! Get color
-	uint32_t getColor(int nr) { return colors[nr]; }
+    uint32_t getColor(int nr) { assert(nr < 16); return pixelEngine.colors[nr]; }
+
+    //! Get color
+    void setColor(int nr, int rgba) { assert(nr < 16); pixelEngine.colors[nr] = rgba; }
+
+    // Returns the number of frames per second
+    inline unsigned getFramesPerSecond() { if (isPAL()) return (unsigned)PAL_REFRESH_RATE; else return(unsigned)NTSC_REFRESH_RATE; }
     
-	// -----------------------------------------------------------------------------------------------
-	//                                         Drawing
-	// -----------------------------------------------------------------------------------------------
+    //! Returns the number of rasterlines per frame
+    inline int getRasterlinesPerFrame() { if (isPAL()) return PAL_HEIGHT; else return NTSC_HEIGHT; }
+    
+    //! Returns the number of CPU cycles performed per rasterline
+    inline int getCyclesPerRasterline() { if (isPAL()) return PAL_CYCLES_PER_RASTERLINE; else return NTSC_CYCLES_PER_RASTERLINE; }
+    
+    //! Returns the number of CPU cycles performed per frame
+    inline int getCyclesPerFrame() { if (isPAL()) return PAL_HEIGHT * PAL_CYCLES_PER_RASTERLINE; else return NTSC_HEIGHT * NTSC_CYCLES_PER_RASTERLINE; }
+    
+    //! Returns the time interval between two frames in nanoseconds
+    inline uint64_t getFrameDelay() { return (uint64_t)(1000000000.0 / (isPAL() ? PAL_REFRESH_RATE : NTSC_REFRESH_RATE)); }
 
-private:	
-	
-	//! Performs the g-access of the VIC
-	void gAccess();
-	
-	//! Performs the c-access of the VIC
-	inline void cAccess();
-	
-	//! Increase the x coordinate by 8
-	inline void countX() { xCounter += 8; }
-		
-	//! returns the character pattern for the current cycle
-	inline uint8_t getCharacterPattern() 
-	//{ return characterMemory[(characterSpace[registerVMLI] << 3) | registerRC]; }
-	{ uint16_t offset = characterMemoryAddr + (characterSpace[registerVMLI] << 3) | registerRC; return characterMemoryMappedToROM ? mem->rom[offset] : mem->ram[offset]; }
-	
-	//! returns the extended character pattern for the current cycle
-	inline uint8_t getExtendedCharacterPattern()
-	//return characterMemory[((characterSpace[registerVMLI] & 0x3f) << 3 )  | registerRC]; }
-	{ uint16_t offset = characterMemoryAddr + ((characterSpace[registerVMLI] & 0x3F) << 3) | registerRC; return characterMemoryMappedToROM ? mem->rom[offset] : mem->ram[offset]; }
-
-	
-	//! returns the bitmap pattern for the current cycle
-	inline uint8_t getBitmapPattern() 
-	// { return characterMemory[(registerVC << 3) | registerRC];	}
-	{ uint16_t offset = characterMemoryAddr + (registerVC << 3) | registerRC; return characterMemoryMappedToROM ? mem->rom[offset] : mem->ram[offset]; }
-	
-	//! This method returns the pattern for a idle access. 
-	/*! This is iportant for the Hyperscreen and FLD effects (maybe others as well).
-	    3.7.1. Idle-Zustand/Display-Zustand the idle access always reads at $3fff or $39ff when the ECM bit is set.
-		Here the doc conflicts: the ECM bit is either at $d016 (chap 3.7.1) or $d011 (3.2)
-		For now i'm ging with $d011 ... wow... this actually seems to work! noticable in the "rbi 2 baseball" intro 
-		(return 0 to see difference)
-		TODO: check if one of the addresses is mapped into the rom? 
-	 */
-	inline uint8_t getIdleAccessPattern() { return mem->ram[bankAddr + (iomem[0x11] & 0x40) ? 0x39ff : 0x3fff]; }
-
-	//! Draw a single character line (8 pixels) in single-color mode
-	/*! \param offset X coordinate of the first pixel to draw
-	 \param pattern Bitmap of the character row to draw
-	 \param fgcolor Foreground color in RGBA format
-	 \param bgcolor Background color in RGBA format
-	 */		
-	void drawSingleColorCharacter(unsigned offset, uint8_t pattern, int fgcolor, int bgcolor);
-	
-	//! Draw a single character line (8 pixels) in multi-color mode
-	/*! \param offset X coordiate of the first pixel to draw
-	 \param pattern Bitmap of the character row to draw
-	 \param colorLookup Four element array containing the different colors in RGBA format
-	 */
-	void drawMultiColorCharacter(unsigned offset, uint8_t pattern, int *colorLookup);
-	
-	//! Draw a single foreground pixel
-	/*! \param offset X coordinate of the pixel to draw
-	 \param color Pixel color in RGBA format
-	 */
-	void setForegroundPixel(unsigned offset, int color);
-	
-	//! Draw a single foreground pixel
-	/*! \param offset X coordinate of the pixel to draw
-	 \param color Pixel color in RGBA format
-	 */
-	void setBackgroundPixel(unsigned offset, int color);
-	
-	//! Draw a single foreground pixel
-	/*! \param offset X coordinate of the pixel to draw
-	 \param color Pixel color in RGBA format
-	 \param nr Number of sprite (0 to 7)
-	 \note The function may trigger an interrupt, if a sprite/sprite or sprite/background collision is detected
-	 */
-	void setSpritePixel(unsigned offset, int color, int nr);
-		
-	//! Draws all sprites into the pixelbuffer
-	/*! A sprite is only drawn if it's enabled and if sprite drawing is not switched off for debugging */
-	void drawAllSprites();
-
-	//! Draw single sprite into pixel buffer
-	/*! Helper function for drawSprites */
-	void drawSprite(uint8_t nr);
-
-	//! Return true if the screen contents is visible, aslo known as DEN bit
-	/*! If the screen is off, the whole area will be covered by the border color.
-	 The technical documentation calls this the DEN (display enable?) bit. */
-	inline bool isVisible() { return iomem[0x11] & 0x10; }
-	
-	//! Draw horizontal and vertical border
-	inline void drawBorder() { if (drawVerticalFrame) drawVerticalBorder(); else if (drawHorizontalFrame) drawHorizontalBorder(); }
-	
-	//! Draw horizontal border into the pixelbuffer
-	void drawHorizontalBorder();
-
-	//! Draw vertical border into the pixelbuffer
-	void drawVerticalBorder();
-		
-	
+    
 	// -----------------------------------------------------------------------------------------------
 	//                                       Getter and setter
 	// -----------------------------------------------------------------------------------------------
@@ -689,21 +494,12 @@ public:
 	
 	//! Returns true if the specified address lies in the VIC I/O range
 	static inline bool isVicAddr(uint16_t addr)	{ return (VIC_START_ADDR <= addr && addr <= VIC_END_ADDR); }
-
-	//! Bind the VIC chip to the virtual C64.
-	void setC64(C64 *c) { assert(c64 == NULL); c64 = c; }
-	
-	//! Bind the VIC chip to the specified CPU.
-	void setCPU(CPU *c) { assert(cpu == NULL); cpu = c; }
-	
-	//! Bind the VIC chip to the specified virtual memory.
-	void setMemory(C64Memory *m) { assert(mem == NULL); mem = m; }
-	
+		
 	//! Get current scanline
-	inline uint16_t getScanline() { return scanline; }
+	inline uint16_t getScanline() { return yCounter; }
 			
 	//! Set rasterline
-	inline void setScanline(uint16_t line) { scanline = line; }
+	inline void setScanline(uint16_t line) { yCounter = line; }
 
 	//! Get memory bank start address
 	uint16_t getMemoryBankAddr();
@@ -712,15 +508,19 @@ public:
 	void setMemoryBankAddr(uint16_t addr);
 			
 	//! Get screen memory address
+    /*! This function is not needed internally and only invoked by the GUI debug panel */
 	uint16_t getScreenMemoryAddr();
 	
 	//! Set screen memory address
+    /*! This function is not needed internally and only invoked by the GUI debug panel */
 	void setScreenMemoryAddr(uint16_t addr);
 		
 	//! Get character memory start address
+    /*! This function is not needed internally and only invoked by the GUI debug panel */
 	uint16_t getCharacterMemoryAddr();
 	
 	//! Set character memory start address
+    /*! This function is not needed internally and only invoked by the GUI debug panel */
 	void setCharacterMemoryAddr(uint16_t addr);
 		
 	//! Peek fallthrough
@@ -730,6 +530,7 @@ public:
 	 passes it to the corresponding I/O chip.
 	 */
 	uint8_t peek(uint16_t addr);
+    
 	//! Poke fallthrough
 	/*! The fallthrough mechanism works as follows:
 	 If the memory is asked to poke a value, it first checks whether the RAM, ROM, or I/O space is visible.
@@ -738,40 +539,51 @@ public:
 	 */	
 	void poke(uint16_t addr, uint8_t value);
 	
-	
+    //! Return last value on VIC data bus
+    uint8_t getDataBus() { return dataBus; }
+    
+    
 	// -----------------------------------------------------------------------------------------------
 	//                                         Properties
 	// -----------------------------------------------------------------------------------------------
 	
 public:
-	
-	//! Return left bound of inner screen area. 
-	//* The returned value is the leftmost coordinate inside the inner screen area */
-	//inline int xStart() { return numberOfColumns() == 40 ? 24 : 31; }
-	inline int xStart() { return numberOfColumns() == 40 ? leftBorderWidth : leftBorderWidth + 7; }
+		
+    //! Current value of DEN bit (DIsplay Enabled)
+    inline bool DENbit() { return iomem[0x11] & 0x10; }
 
-	//! Return right bound of inner screen area
-	//* The returned value is the leftmost coordinate inside the right border */
-	// inline int xEnd() { return numberOfColumns() == 40 ? 343 : 334; }
-	inline int xEnd() { return numberOfColumns() == 40 ? leftBorderWidth + SCREEN_WIDTH : leftBorderWidth + SCREEN_WIDTH - 7; }
+    //! DEN bit in previous cycle (DIsplay Enabled)
+    inline bool DENbitInPreviousCycle() { return oldControlReg1 & 0x10; }
+
+    //! Current value of BMM bit (Bit Map Mode)
+    inline bool BMMbit() { return iomem[0x11] & 0x20; }
+
+    //! BMM bit in previous cycle (Bit Map Mode)
+    inline bool BMMbitInPreviousCycle() { return oldControlReg1 & 0x20; }
+    
+    //! Current value of ECM bit (Extended Character Mode)
+    inline bool ECMbit() { return iomem[0x11] & 0x40; }
+
+    //! ECM bit in previous cycle (Extended Character Mode)
+    inline bool ECMbitInPreviousCycle() { return oldControlReg1 & 0x40; }
+
+    //! Returns masked CB13 bit (controls memory access)
+    inline uint8_t CB13() { return iomem[0x18] & 0x08; }
+
+    //! Returns masked CB13/CB12/CB11 bits (controls memory access)
+    inline uint8_t CB13CB12CB11() { return iomem[0x18] & 0x0E; }
+
+    //! Returns masked VM13/VM12/VM11/VM10 bits (controls memory access)
+    inline uint8_t VM13VM12VM11VM10() { return iomem[0x18] & 0xF0; }
+
+	//! Returns the state of the CSEL bit
+	inline bool isCSEL() { return iomem[0x16] & 0x08; }
 	
-	//! Return upper bound of inner screen area
-	// inline int yStart() { return numberOfRows() == 25 ? 51 : 55; }
-	inline int yStart() { return numberOfRows() == 25 ? 51 : 55; }
-	
-	//! Return lower bound of inner screen area
-	// inline int yEnd() { return numberOfRows() == 25 ? 250 : 246; }
-	inline int yEnd() { return numberOfRows() == 25 ? 250 : 246; }
-	
-	//! Returns the state of the CSEL register
-	inline bool isCSEL() { return iomem[0x16] & 8; }
-	
-	//! Returns the state of the RSEL register
-	inline bool isRSEL() { return iomem[0x11] & 8; }
-	
+	//! Returns the state of the RSEL bit
+	inline bool isRSEL() { return iomem[0x11] & 0x08; }
+    
 	//! Returns the currently set display mode
-	/*! The display mode is determined by Bit 5 and Bit 6 of control register 1 and Bit 4 of control register 2.
-	    To enable a fast handling, we put the bits together into a single integer value. */
+	/*! The display mode is determined by bits 5 and 6 of control register 1 and bit 4 of control register 2. */
 	inline DisplayMode getDisplayMode() 
 	{ return (DisplayMode)((iomem[0x11] & 0x60) | (iomem[0x16] & 0x10)); }
 	
@@ -812,13 +624,7 @@ public:
 	
 	//! Set horizontan raster scroll offset (0 to 7)
 	inline void setHorizontalRasterScroll(uint8_t offset) { iomem[0x16] = (iomem[0x16] & 0xF8) | (offset & 0x07); }
-		
-	//! Returns the row number for a given rasterline
-	inline uint8_t getRowNumberForRasterline(uint16_t line) { return (line - FIRST_Y_COORD_OF_INNER_AREA + 3 - getVerticalRasterScroll()) / 8; }
-	
-	//! Returns the character row number for a given rasterline
-	inline uint8_t getRowOffsetForRasterline(uint16_t line) { return (line - FIRST_Y_COORD_OF_INNER_AREA + 3 - getVerticalRasterScroll()) % 8; }
-	
+			
 	//! Return border color
 	inline uint8_t getBorderColor() { return iomem[0x20] & 0x0F; }
 	
@@ -835,29 +641,37 @@ public:
 	// -----------------------------------------------------------------------------------------------
 
 private:
-	
-	//! Returns true, if the specified rasterline is a DMA line
-	/*! Every eigths row, the VIC chip performs a DMA access and fetches data from screen memory and color memory
-	 The first DMA access occurrs within lines 0x30 to 0xf7 and  */
-	inline bool isDMALine() { return scanline >= 0x30 && scanline <= 0xf7 && (scanline & 7) == getVerticalRasterScroll(); }	
-	
-	//! checkDmaLineCondition
-	/*! DEPRECATED. It's only used once and should be moved into the program code */
-	inline void checkDmaLineCondition() { if ((dmaLine = (dmaLinesEnabled && isDMALine()))) displayState = true; }
-	
-	//! Set BA line to low
-	/*! Note: The BA pin is directly connected to the RDY line of the CPU */
-	void pullDownBA(uint16_t source);
-	
-	//! Set BA line to high
-	/*! Note: The BA pin is directly connected to the RDY line of the CPU */
-	void releaseBA(uint16_t source);
+    
+    //! Set to true in cycle 1, cycle 63 and cycle 65 iff yCounter equals contents of D012
+    /*! Variable is needed to determine if a rasterline should be issued in cycle 1 or 2 */
+    bool yCounterEqualsIrqRasterline;
+    
+    /*! Update bad line condition
+        "Ein Bad-Line-Zustand liegt in einem beliebigen Taktzyklus vor, wenn an der
+         negativen Flanke von ¯0 zu Beginn des 
+         [1] Zyklus RASTER >= $30 und RASTER <= $f7 und
+         [2] die unteren drei Bits von RASTER mit YSCROLL übereinstimmen 
+         [3] und in einem beliebigen Zyklus von Rasterzeile $30 das DEN-Bit gesetzt war." [C.B.] */
+     inline void updateBadLineCondition() {
+         badLineCondition =
+            yCounter >= 0x30 && yCounter <= 0xf7 /* [1] */ &&
+            (yCounter & 0x07) == getVerticalRasterScroll() /* [2] */ &&
+            DENwasSetInRasterline30 /* [3] */;
 
-	//! Request memory bus for a specific sprite
-	inline void requestBusForSprite(uint8_t spriteNr) { if (spriteDmaOnOff & (1 << spriteNr)) pullDownBA(1 << spriteNr); }
-	
-	//! Release memory bus for a specific sprite
-	inline void releaseBusForSprite(uint8_t spriteNr) { releaseBA(1 << spriteNr); }
+         // OLD CODE: UPDATE OF DISPLAY STATE IS TOO EARLY. NEEDS TO BE DONE AT THE END OF EACH CYCLE
+         // if (badLineCondition)
+         //    displayState = true;
+     }
+    
+    //! Update display state
+    /*! Invoked at the end of each VIC cycle */
+    inline void updateDisplayState() {
+        if (badLineCondition)
+            displayState = true;
+    }
+    
+    //! Set BA line
+    void setBAlow(bool value);
 	
 	//! Trigger a VIC interrupt
 	/*! VIC interrupts can be triggered from multiple sources. Each one is associated with a specific bit */
@@ -866,6 +680,8 @@ private:
 public: 
 	
 	//! Return next interrupt rasterline
+    /*! Note: In line 0, the interrupt is triggered in cycle 2
+              In all other lines, it is triggered in cycle 1 */
 	inline uint16_t rasterInterruptLine() { return ((iomem[0x11] & 128) << 1) + iomem[0x12]; }
 
 	//! Set interrupt rasterline 
@@ -884,7 +700,7 @@ public:
 	/*! Although we do not support hardware lightpens, we need to take care of it because lightpen interrupts 
 	 can be triggered by software. It is used by some games to determine the current X position within 
 	 the current rasterline. */
-	void simulateLightPenInterrupt();
+	void triggerLightPenInterrupt();
 
 	
 	// -----------------------------------------------------------------------------------------------
@@ -892,27 +708,40 @@ public:
 	// -----------------------------------------------------------------------------------------------
 
 private:
-	
-	//! Update sprite DMA bits
-	void updateSpriteDmaOnOff();
-	
-	//! Read sprite pointer
-	/*! Determines the start adress of sprite data and stores the value into spritePtr */
-	inline void readSpritePtr(int sprite) { 
-		spritePtr[sprite] = bankAddr + (mem->ram[bankAddr + screenMemoryAddr + 0x03F8 + sprite] << 6); 
-	}
-	
-	//! Read sprite data 
-	/*! Read next byte of sprite data into shift register. */
-	inline void readSpriteData(int sprite) { 
-		if (spriteDmaOnOff & (1 << sprite)) { 
-			spriteShiftReg[sprite][mc[sprite]%3] = mem->ram[spritePtr[sprite]+mc[sprite]]; mc[sprite]++; 
-		}
-	}
-	
+
+    //! Turn off sprite dma if conditions are met
+    /*! In cycle 16, the mcbase pointer is advanced three bytes for all dma enabled sprites. Advancing 
+        three bytes means that mcbase will then point to the next sprite line. When mcbase reached 63,
+        all 21 sprite lines have been drawn and sprite dma is switched off.
+        The whole operation is skipped when the y expansion flipflop is 0. This never happens for
+        normal sprites (there is no skipping then), but happens every other cycle for vertically expanded 
+        sprites. Thus, mcbase advances for those sprites at half speed which actually causes the expansion. */
+    void turnSpriteDmaOff();
+
+    //! Turn on sprite dma accesses if drawing conditions are met
+    /*! Sprite dma is turned on either in cycle 55 or cycle 56. Dma is turned on iff it's currently turned 
+        off and the sprite y positon equals the lower 8 bits of yCounter. */
+    void turnSpriteDmaOn();
+
+    //! Toggle expansion flipflop for vertically stretched sprites
+    /*! In cycle 56, register D017 is read and the flipflop gets inverted for all sprites with vertical
+        stretching enabled. When the flipflop goes down, advanceMCBase() will have no effect in the
+        next rasterline. This causes each sprite line to be drawn twice. */
+    void toggleExpansionFlipflop();
+    
+    //! Turn on sprite display bit if conditions are met
+    /*! In cycle 58, drawing is switched on for all sprites that got dma access switched on in 
+        cycle 55 or 56. */
+    void turnSpriteDisplayOn();
+
+    //! Turn off sprite display bit if conditions are met
+    /*! In cycle 58, drawing is switched off for all sprites that lost dma access in cycle 16. */
+    void turnSpriteDisplayOff();
+    
 	//! Get sprite depth
 	/*! The value is written to the z buffer to resolve overlapping pixels */
-	inline uint8_t spriteDepth(uint8_t nr) { return spriteIsDrawnInBackground(nr) ? 0xf0 + nr : nr; }
+	inline uint8_t spriteDepth(uint8_t nr) {
+        return spriteIsDrawnInBackground(nr) ? (SPRITE_LAYER_BG_DEPTH | nr) : (SPRITE_LAYER_FG_DEPTH | nr); }
 	
 public: 
 	
@@ -1031,26 +860,34 @@ public:
 	//! Finish frame
 	/*! This function is called after the last cycle of the last rasterline */
 	void endFrame();
-		
+	
+    //! Push portions of the VIC state into the pixel engine
+    /*! Pushs everything that needs to be recorded one cycle prior to drawing */
+    void preparePixelEngine();
+    
 	//! VIC execution functions
-	void cycle1();  void cycle2();  void cycle3();  void cycle4();  void cycle5();  void cycle6();  void cycle7();  void cycle8();  void cycle9();  void cycle10();
-	void cycle11(); void cycle12(); void cycle13(); void cycle14(); void cycle15(); void cycle16(); void cycle17(); void cycle18(); void cycle19(); void cycle20();
-	void cycle21(); void cycle22(); void cycle23(); void cycle24(); void cycle25(); void cycle26(); void cycle27(); void cycle28(); void cycle29(); void cycle30();
-	void cycle31(); void cycle32(); void cycle33(); void cycle34(); void cycle35(); void cycle36(); void cycle37(); void cycle38(); void cycle39(); void cycle40();
-	void cycle41(); void cycle42(); void cycle43(); void cycle44(); void cycle45(); void cycle46(); void cycle47(); void cycle48(); void cycle49(); void cycle50();
-	void cycle51(); void cycle52(); void cycle53(); void cycle54(); void cycle55(); void cycle56(); void cycle57(); void cycle58(); void cycle59(); void cycle60();
-	void cycle61(); void cycle62(); void cycle63(); void cycle64(); void cycle65();
+	void cycle1();  void cycle2();  void cycle3();  void cycle4();
+    void cycle5();  void cycle6();  void cycle7();  void cycle8();
+    void cycle9();  void cycle10(); void cycle11(); void cycle12();
+    void cycle13(); void cycle14(); void cycle15(); void cycle16();
+    void cycle17(); void cycle18();
+
+    void cycle19to54();
+
+    void cycle55(); void cycle56(); void cycle57(); void cycle58();
+    void cycle59(); void cycle60(); void cycle61(); void cycle62();
+    void cycle63(); void cycle64(); void cycle65();
 	
-	
+	//! Debug entry point for each rasterline cycle
+
+private:
+    void debug_cycle(unsigned cycle);
+
 	// -----------------------------------------------------------------------------------------------
 	//                                              Debugging
 	// -----------------------------------------------------------------------------------------------
 
-private:
 	
-	//! Colorize line
-	void markLine(int start, unsigned length, int color);
-
 public: 
 	
 	//! Return true iff IRQ lines are colorized
@@ -1072,22 +909,22 @@ public:
 	void setHideSprites(bool hide) { drawSprites = !hide; }
 	
 	//! Return true iff sprite-sprite collision detection is enabled
-	bool getSpriteSpriteCollision(uint8_t nr) { return spriteSpriteCollisionEnabled & (1 << nr); }
+	bool getSpriteSpriteCollisionFlag() { return spriteSpriteCollisionEnabled; }
 
 	//! Enable or disable sprite-sprite collision detection
-	void setSpriteSpriteCollision(uint8_t nr, bool b) { if (b) SET_BIT(spriteSpriteCollisionEnabled, nr); else CLR_BIT(spriteSpriteCollisionEnabled, nr); }
+    void setSpriteSpriteCollisionFlag(bool b) { spriteSpriteCollisionEnabled = b; };
 
 	//! Enable or disable sprite-sprite collision detection
-	void toggleSpriteSpriteCollisionFlag(uint8_t nr) { setSpriteSpriteCollision(nr, !getSpriteSpriteCollision(nr)); }
+    void toggleSpriteSpriteCollisionFlag() { spriteSpriteCollisionEnabled = !spriteSpriteCollisionEnabled; }
 	
 	//! Return true iff sprite-background collision detection is enabled
-	bool getSpriteBackgroundCollision(uint8_t nr) { return spriteBackgroundCollisionEnabled & (1 << nr); }
+	bool getSpriteBackgroundCollisionFlag() { return spriteBackgroundCollisionEnabled; }
 
 	//! Enable or disable sprite-background collision detection
-	void setSpriteBackgroundCollision(uint8_t nr, bool b) { if (b) SET_BIT(spriteBackgroundCollisionEnabled, nr); else CLR_BIT(spriteBackgroundCollisionEnabled, nr); }
+    void setSpriteBackgroundCollisionFlag(bool b) { spriteBackgroundCollisionEnabled = b; }
 
 	//! Enable or disable sprite-background collision detection
-	void toggleSpriteBackgroundCollisionFlag(uint8_t nr) { setSpriteBackgroundCollision(nr, !getSpriteBackgroundCollision(nr)); }
+    void toggleSpriteBackgroundCollisionFlag() { spriteBackgroundCollisionEnabled = !spriteBackgroundCollisionEnabled; }
 };
 
 #endif

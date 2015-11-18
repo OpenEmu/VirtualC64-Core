@@ -44,25 +44,59 @@ PRGArchive::isPRGFile(const char *filename)
 }
 
 PRGArchive *
-PRGArchive::archiveFromFile(const char *filename)
+PRGArchive::archiveFromPRGFile(const char *filename)
 {
 	PRGArchive *archive;
 	
 	fprintf(stderr, "Loading PRG archive from PRG file...\n");
 	archive = new PRGArchive();	
 	if (!archive->readFromFile(filename)) {
-		delete archive;
+        fprintf(stderr, "Failed to load archive\n");
+        delete archive;
 		archive = NULL;
 	}
 	
-	fprintf(stderr, "PRG archive loaded successfully.\n");
 	return archive;
 }
 
-const char *
-PRGArchive::getTypeOfContainer() 
+PRGArchive *
+PRGArchive::archiveFromArchive(Archive *otherArchive)
 {
-	return "PRG";
+    PRGArchive *archive;
+    
+    if (otherArchive == NULL || otherArchive->getNumberOfItems() == 0)
+        return NULL;
+    
+    fprintf(stderr, "Creating PRG archive from %s archive...\n", otherArchive->getTypeAsString());
+    
+    if ((archive = new PRGArchive()) == NULL) {
+        fprintf(stderr, "Failed to create archive\n");
+        return NULL;
+    }
+    
+    // Determine container size and allocate memory
+    archive->size = 2 + otherArchive->getSizeOfItem(0);
+    if ((archive->data = (uint8_t *)malloc(archive->size)) == NULL) {
+        fprintf(stderr, "Failed to allocate %d bytes of memory\n", archive->size);
+        delete archive;
+        return NULL;
+    }
+    
+    // Load address
+    uint8_t* ptr = archive->data;
+    *ptr++ = LO_BYTE(otherArchive->getDestinationAddrOfItem(0));
+    *ptr++ = HI_BYTE(otherArchive->getDestinationAddrOfItem(0));
+        
+    // File data
+    int byte;
+    otherArchive->selectItem(0);
+    while ((byte = otherArchive->getByte()) != EOF) {
+        *ptr++ = (uint8_t)byte;
+    }
+    
+    fprintf(stderr, "%s archive created with %d bytes (size of item 0 = %d).\n",
+            archive->getTypeAsString(), archive->size, archive->getSizeOfItem(0));
+    return archive;
 }
 
 void 
@@ -81,39 +115,29 @@ PRGArchive::fileIsValid(const char *filename)
 }
 
 bool 
-PRGArchive::readFromBuffer(const void *buffer, unsigned length)
+PRGArchive::readFromBuffer(const uint8_t *buffer, unsigned length)
 {	
 	if ((data = (uint8_t *)malloc(length)) == NULL)
 		return false;
 
 	memcpy(data, buffer, length);
 	size = length;
-	
+	    
 	return true;
 }
 
-bool 
-PRGArchive::readDataFromFile(FILE *file, struct stat fileProperties)
+unsigned
+PRGArchive::writeToBuffer(uint8_t *buffer)
 {
-	int c = 0;
-	
-	// Allocate memory
-	if ((data = (uint8_t *)malloc(fileProperties.st_size)) == NULL) {
-		return false;
-	}
-		
-	// Read data
-	c = fgetc(file);
-	while(c != EOF) {
-		data[size++] = c;
-		c = fgetc(file);
-	}
+    assert(data != NULL);
 
-	// fprintf(stderr, "%d bytes read (out of %d)\n", (int)fileProperties.st_size, size);
-	return true;
+    if (buffer) {
+        memcpy(buffer, data, size);
+    }
+    return size;
 }
 
-int 
+int
 PRGArchive::getNumberOfItems()
 {
 	return 1;
@@ -125,15 +149,6 @@ PRGArchive::getNameOfItem(int n)
 	return "UNKNOWN";
 }
 	
-int 
-PRGArchive::getSizeOfItem(int n)
-{
-	if (size > 0)
-		return size-2;
-	else
-		return 0;
-}		
-
 const char *
 PRGArchive::getTypeOfItem(int n)
 {
@@ -143,7 +158,7 @@ PRGArchive::getTypeOfItem(int n)
 uint16_t 
 PRGArchive::getDestinationAddrOfItem(int n)
 {
-	uint16_t result = data[0] + (data[1] << 8);
+	uint16_t result = LO_HI(data[0], data[1]);
 	return result;
 }
 
@@ -165,16 +180,11 @@ PRGArchive::getByte()
 		return -1;
 		
 	// get byte
-	result = data[fp];
+	result = data[fp++];
 	
 	// check for end of file
-	if (fp == (size-1)) {
+	if (fp == size)
 		fp = -1;
-	} else {
-		// advance file pointer
-		fp++;
-	}
 
-	// fprintf(stderr, "%02X ", result);
 	return result;
 }

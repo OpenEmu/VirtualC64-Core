@@ -21,16 +21,15 @@
 #define _SNAPSHOT_INC
 
 #include "Container.h"
+#include "VIC_constants.h"
 
 class C64;
 
+/*! @class Snapshot
+ *  @brief The Snapshot class declares the programmatic interface for a file that contains an emulator snapshot (a frozen internal state).
+ */
 class Snapshot : public Container {
 	
-private:
-
-	//! Size of a snapshot file in bytes
-	static const int MAX_SNAPSHOT_SIZE = 850000; // 783342; 
-
 private:
 	
 	struct {
@@ -38,14 +37,13 @@ private:
 		//! Magic bytes ('V','C','6','4')
 		char magic[4];
 		
-		//! Version number (major)
+		//! Version number (V major.minor.subminor)
 		uint8_t major;
-		
-		//! Version number (minor)
 		uint8_t minor;
-		
+        uint8_t subminor;
+
 		//! Is this a snapshot of a PAL machine or an NTSC machine?
-		uint8_t isPAL;
+		// uint8_t isPAL;
 		
 		// Screenshot
 		struct { 	
@@ -54,14 +52,18 @@ private:
 			uint16_t width, height;
 		
 			//! Screen buffer data 
-			uint32_t screen[512 * 512];
+			uint32_t screen[PAL_RASTERLINES * NTSC_PIXELS];
 		
 		} screenshot;
-		
-		//! Internal state
-		uint8_t data[MAX_SNAPSHOT_SIZE];
-	} fileContents;
+        
+        // Size of internal state
+        uint32_t size;
+
+    } header;
 	
+    // Internal state data
+    uint8_t *state;
+
 	//! Date and time of snapshot creation
 	time_t timestamp;
 	
@@ -72,30 +74,43 @@ public:
 	
 	//! Destructor
 	~Snapshot();
-			
+	
+    //! Free allocated memory
+    void dealloc();
+
+    //! Allocate memory for storing internal state
+    bool alloc(unsigned size);
+
+    //! Returns true if file header matches
+    static bool isSnapshot(const char *filename);
+
+    //! Returns true if 'fileIsValid' and version number match
+    static bool isSnapshot(const char *filename, int major, int minor, int subminor);
+    
 	//! Factory methods
 	static Snapshot *snapshotFromFile(const char *filename);
-	static Snapshot *snapshotFromBuffer(const void *buffer, unsigned size);
+	static Snapshot *snapshotFromBuffer(const uint8_t *buffer, unsigned size);
 	
 	//! Virtual functions from Container class
 	bool fileIsValid(const char *filename);
-	bool readFromBuffer(const void *buffer, unsigned length);
-	bool writeToBuffer(void *buffer);
-	unsigned sizeOnDisk();
-		
-	bool writeDataToFile(FILE *file, struct stat fileProperties);
-	
-	void dealloc();
-	const char *getTypeOfContainer();
-	
-	//! Returns pointer to core data
-	uint8_t *getData() { return fileContents.data; }
+	bool readFromBuffer(const uint8_t *buffer, unsigned length);
+	unsigned writeToBuffer(uint8_t *buffer);
+    unsigned sizeOnDisk() { return getHeaderSize() + getDataSize(); }
+    
+    ContainerType getType();
+	const char *getTypeAsString();
 
-	//! Returns pointer to file contents
-	uint8_t *getFileContents() { return (uint8_t *)&fileContents; }
+    //! Returns size of header
+    uint32_t getHeaderSize() { return sizeof(header); }
 
-	//! Returns size of file contents
-	unsigned getFileContentsSize() { return sizeof(fileContents); }
+    //! Returns pointer to header data
+    uint8_t *getHeader() { return (uint8_t *)&header; }
+
+    //! Returns size of core data
+    uint32_t getDataSize() { return header.size; }
+
+    //! Returns pointer to core data
+	uint8_t *getData() { return state; }
 
 	//! Return timestamp
 	time_t getTimestamp() { return timestamp; }
@@ -104,22 +119,26 @@ public:
 	void setTimestamp(time_t value) { timestamp = value; }
 
 	//! Return PAL/NTSC flag
-	bool isPAL() { return (bool)fileContents.isPAL; }
+	// bool isPAL() { return (bool)header.isPAL; }
 	
 	//! Set PAL/NTSC flag
-	void setPAL(bool value) { fileContents.isPAL = (uint8_t)value; }
+	// void setPAL(bool value) { header.isPAL = (uint8_t)value; }
 	
 	//! Returns true, if snapshot does not contain data yet
 	bool isEmpty() { return timestamp == 0; }
-
-	//! Take screenshot
-	// DEPRECATED. Already stored in snapshot
-	//void takeScreenshot(uint32_t *buf) { memcpy(screen, buf, sizeof(screen)); }
-	
-	void takeScreenshot(uint32_t *buf) { memcpy(fileContents.screenshot.screen, buf, sizeof(fileContents.screenshot.screen)); }
 	
 	//! Return screen buffer
-	unsigned char *getImageData() { return (unsigned char *)fileContents.screenshot.screen; }
+	unsigned char *getImageData() { return (unsigned char *)header.screenshot.screen; }
+
+    //! Return image width
+    unsigned getImageWidth() { return header.screenshot.width; }
+
+    //! Return image height
+    unsigned getImageHeight() { return header.screenshot.height; }
+
+    //! Take screenshot
+    void takeScreenshot(uint32_t *buf, bool pal);
+
 };
 
 #endif

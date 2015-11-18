@@ -20,11 +20,35 @@
 
 IEC::IEC()
 {
-	name = "IEC";
-	
-	debug(2, "  Creating IEC bus at address %p...\n", this);
-
-	drive = NULL;
+  	name = "IEC";
+    debug(2, "  Creating IEC bus at address %p...\n", this);
+    
+    // Register snapshot items
+    SnapshotItem items[] = {
+        
+        { &driveConnected,      sizeof(driveConnected),         CLEAR_ON_RESET },
+        { &atnLine,             sizeof(atnLine),                CLEAR_ON_RESET },
+        { &oldAtnLine,          sizeof(oldAtnLine),             CLEAR_ON_RESET },
+        { &clockLine,           sizeof(clockLine),              CLEAR_ON_RESET },
+        { &oldClockLine,        sizeof(oldClockLine),           CLEAR_ON_RESET },
+        { &dataLine,            sizeof(dataLine),               CLEAR_ON_RESET },
+        { &oldDataLine,         sizeof(oldDataLine),            CLEAR_ON_RESET },
+        { &deviceAtnPin,        sizeof(deviceAtnPin),           CLEAR_ON_RESET },
+        { &deviceAtnIsOutput,   sizeof(deviceAtnIsOutput),      CLEAR_ON_RESET },
+        { &deviceDataPin,       sizeof(deviceDataPin),          CLEAR_ON_RESET },
+        { &deviceDataIsOutput,  sizeof(deviceDataIsOutput),     CLEAR_ON_RESET },
+        { &deviceClockPin,      sizeof(deviceClockPin),         CLEAR_ON_RESET },
+        { &deviceClockIsOutput, sizeof(deviceClockIsOutput),    CLEAR_ON_RESET },
+        { &ciaDataPin,          sizeof(ciaDataPin),             CLEAR_ON_RESET },
+        { &ciaDataIsOutput,     sizeof(ciaDataIsOutput),        CLEAR_ON_RESET },
+        { &ciaClockPin,         sizeof(ciaClockPin),            CLEAR_ON_RESET },
+        { &ciaClockIsOutput,    sizeof(ciaClockIsOutput),       CLEAR_ON_RESET },
+        { &ciaAtnPin,           sizeof(ciaAtnPin),              CLEAR_ON_RESET },
+        { &ciaAtnIsOutput,      sizeof(ciaAtnIsOutput),         CLEAR_ON_RESET },
+        { &busActivity,         sizeof(busActivity),            CLEAR_ON_RESET },
+        { NULL,                 0,                              0 }};
+    
+    registerSnapshotItems(items, sizeof(items));
 }
 
 IEC::~IEC()
@@ -35,8 +59,12 @@ IEC::~IEC()
 void 
 IEC::reset()
 {
-	debug(2, "  Resetting IEC bus...\n");
-
+   VirtualComponent::reset();
+    
+    // Establish bindings
+    drive = c64->floppy;
+    
+    driveConnected = 1;
 	atnLine = 1;
 	oldAtnLine = 1;
 	clockLine = 1;
@@ -52,52 +80,16 @@ IEC::reset()
 	ciaAtnPin = 1;
 	ciaAtnIsOutput = 1;
 	
-	connectDrive();
 	setDeviceClockPin(1);
 	setDeviceDataPin(1);
-	busActivity = 0;
-}
- 
-void
-IEC::loadFromBuffer(uint8_t **buffer)
-{
-	debug(2, "  Loading IEC state...\n");
-	driveConnected = (bool)read8(buffer);
-	atnLine = (bool)read8(buffer);
-	oldAtnLine = (bool)read8(buffer);
-	clockLine = (bool)read8(buffer);
-	oldClockLine = (bool)read8(buffer);
-	dataLine = (bool)read8(buffer);
-	oldDataLine = (bool)read8(buffer);
-	deviceDataPin = (bool)read8(buffer);
-	deviceClockPin = (bool)read8(buffer);
-	ciaDataPin = (bool)read8(buffer);
-	ciaDataIsOutput = (bool)read8(buffer);
-	ciaClockPin = (bool)read8(buffer);
-	ciaClockIsOutput = (bool)read8(buffer);
-	ciaAtnPin = (bool)read8(buffer);
-	ciaAtnIsOutput = (bool)read8(buffer);
 }
 
 void
-IEC::saveToBuffer(uint8_t **buffer)
+IEC::ping()
 {
-	debug(2, "  Saving IEC state...\n");
-	write8(buffer, (uint8_t)driveConnected);
-	write8(buffer, (uint8_t)atnLine);
-	write8(buffer, (uint8_t)oldAtnLine);
-	write8(buffer, (uint8_t)clockLine);
-	write8(buffer, (uint8_t)oldClockLine);
-	write8(buffer, (uint8_t)dataLine);
-	write8(buffer, (uint8_t)oldDataLine);
-	write8(buffer, (uint8_t)deviceDataPin);
-	write8(buffer, (uint8_t)deviceClockPin);
-	write8(buffer, (uint8_t)ciaDataPin);
-	write8(buffer, (uint8_t)ciaDataIsOutput);
-	write8(buffer, (uint8_t)ciaClockPin);
-	write8(buffer, (uint8_t)ciaClockIsOutput);
-	write8(buffer, (uint8_t)ciaAtnPin);
-	write8(buffer, (uint8_t)ciaAtnIsOutput);
+ 	drive->c64->putMessage(MSG_VC1541_ATTACHED, driveConnected);
+    drive->c64->putMessage(MSG_VC1541_DATA, busActivity > 0);
+    
 }
 
 void 
@@ -141,6 +133,8 @@ IEC::connectDrive()
 { 
 	driveConnected = true; 
 	drive->c64->putMessage(MSG_VC1541_ATTACHED, 1);
+    if (drive->soundMessagesEnabled())
+        drive->c64->putMessage(MSG_VC1541_ATTACHED_SOUND, 1);
 }
 	
 void 
@@ -148,6 +142,9 @@ IEC::disconnectDrive()
 { 
 	driveConnected = false; 
 	drive->c64->putMessage(MSG_VC1541_ATTACHED, 0);
+    if (drive->soundMessagesEnabled())
+        drive->c64->putMessage(MSG_VC1541_ATTACHED_SOUND, 0);
+
 }
 
 bool IEC::_updateIecLines(bool *atnedge)
@@ -203,7 +200,7 @@ void IEC::updateIecLines()
 			drive->c64->putMessage(MSG_VC1541_DATA, 1);
 			drive->c64->setWarp(drive->c64->getAlwaysWarp() || drive->c64->getWarpLoad());
 		}
-		busActivity = 10;
+		busActivity = 30;
 	}
 
 	if (signals_changed && tracingEnabled()) {
@@ -253,3 +250,140 @@ void IEC::execute()
 		}
 	}
 }
+
+// -------------------------------------------------------------------
+//                            Fast loader
+// -------------------------------------------------------------------
+
+uint8_t IEC::IECOutATN(uint8_t byte)
+{
+    // The upper four bits contain the command
+    // -01- : LISTEN
+    // -10- : TALK
+    // ---0 : on
+    // ---1 : off
+    // The lower four bits contain the device number
+    
+    switch (byte >> 4) {
+            
+        case 2: /* LISTEN */
+
+            debug(2, "Device %d is now listening\n", byte & 0x0F);
+            if ((byte & 0x0F) == 8) { // We only support device number 8
+                listening = true;
+                filename[0] = 0;
+                return IEC_OK;
+            } else {
+                listening = false;
+                return IEC_NOTPRESENT;
+            }
+            
+        case 3: /* UNLISTEN */
+
+            debug(2, "No longer listening\n");
+            listening = false;
+            return IEC_OK;
+            
+        case 4: /* TALK */
+
+            debug(2, "Device %d is now listening\n", byte & 0x0F);
+            if ((byte & 0x0F) == 8) { // We only support device number 8
+                talking = true;
+                return IEC_OK;
+            } else {
+                talking = false;
+                return IEC_NOTPRESENT;
+            }
+
+        case 5: /* UNTALK */
+            
+            debug(2, "No longer talking\n");
+            talking = false;
+            return IEC_OK;
+    }
+    
+    return IEC_TIMEOUT;
+}
+
+uint8_t IEC::IECOutSec(uint8_t byte)
+{
+    // byte: xxxx---- : Command to execute
+    //       ----xxxx : Secondary address
+    
+    if (listening) {
+        return IECOutSecWhileListening(byte);
+    }
+    
+    if (talking) {
+        return IECOutSecWhileTalking(byte);
+    }
+    
+    return IEC_TIMEOUT;
+}
+
+uint8_t IEC::IECOutSecWhileListening(uint8_t byte)
+{
+    command = (byte >> 4);
+    secondary = (byte & 0xF);
+    
+    switch (command) {
+        case IEC_CMD_OPEN:
+            debug(2, "Received command: OPEN\n");
+            return IEC_OK;
+        case IEC_CMD_CLOSE:
+            debug(2, "Received command: CLOSE\n");
+            // Turn on LED
+            return IEC_OK;
+    }
+    return IEC_OK;
+}
+
+uint8_t IEC::IECOutSecWhileTalking(uint8_t byte)
+{
+    command = (byte >> 4);
+    secondary = (byte & 0xF);
+    return IEC_OK;
+
+}
+
+uint8_t IEC::IECOut(uint8_t byte, bool eoi)
+{
+    char tmp[2] = { byte, 0 };
+    strncat(filename, tmp, 16);
+    
+    if (eoi) {
+        printf("Filename: ");
+        for (unsigned i = 0; i < strlen(filename); i++)
+            printf("%c", pet2ascii(filename[i]));
+        printf("\n");
+    }
+
+    return IEC_OK;
+}
+
+uint8_t IEC::IECIn(uint8_t *byte)
+{
+    *byte = 42;
+    return IEC_OK;
+}
+
+void IEC::IECSetATN()
+{
+    
+}
+
+void IEC::IECRelATN()
+{
+    
+}
+
+void IEC::IECTurnaround()
+{
+    
+}
+
+void IEC::IECRelease()
+{
+    
+}
+

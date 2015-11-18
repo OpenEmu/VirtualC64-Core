@@ -18,6 +18,9 @@
 
 #include "C64.h"
 
+int debugcnt = 0;
+int debugirq = 0;
+
 // --------------------------------------------------------------------------------
 // Execution thread
 // --------------------------------------------------------------------------------
@@ -46,7 +49,7 @@ void
 	c64->debug(1, "Execution thread started\n");
 	c64->putMessage(MSG_RUN);
 	
-	// Configure thread properties...
+    // Configure thread properties...
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 	pthread_cleanup_push(threadCleanup, thisC64);
@@ -55,7 +58,7 @@ void
 	c64->cpu->clearErrorState();
 	c64->floppy->cpu->clearErrorState();
 	c64->restartTimer();
-	
+    
 	while (1) {		
 		if (!c64->executeOneLine())
 			break;		
@@ -80,7 +83,7 @@ C64::C64()
 {	
 	name = "C64";
 	
-	debug(1, "Creating virtual C64 at address %p...\n", this);
+	debug(1, "Creating virtual C64\n");
 
 	p = NULL;    
     warp = false;
@@ -88,56 +91,64 @@ C64::C64()
     warpLoad = false;
 	
 	// Create components
-	mem = new C64Memory();
-	cpu = new CPU();	
+	cpu = new CPU();
+    mem = new C64Memory();
 	vic = new VIC();
 	sid = new SIDWrapper();
 	cia1 = new CIA1();
 	cia2 = new CIA2();
-	keyboard = new Keyboard();
 	iec = new IEC();
+    expansionport = new ExpansionPort();
 	floppy = new VC1541();
-	
-	// Bind components
-	cpu->setC64(this);
-	cpu->setMemory(mem);
-	mem->setVIC(vic);
-	mem->setSID(sid);
-	mem->setCIA1(cia1);
-	mem->setCIA2(cia2);
-	mem->setCPU(cpu);
-	cia1->setCPU(cpu);
-	cia1->setVIC(vic);	
-	cia1->setKeyboard(keyboard);
-	cia2->setCPU(cpu);
-	cia2->setVIC(vic);	
-	cia2->setIEC(iec);
-	vic->setC64(this);
-	vic->setCPU(cpu);
-	vic->setMemory(mem);
-	iec->setDrive(floppy);
-	floppy->setIEC(iec);
-	floppy->setC64(this);
-	
-	// Setup initial game port mapping (0 joysticks connected)
-	setInputDevice(0, IPD_UNCONNECTED);
-	setInputDevice(1, IPD_UNCONNECTED);
-	joystick1 = new Joystick;
-	joystick2 = new Joystick;
-		
+    keyboard = new Keyboard();
+    joystick1 = new Joystick();
+    joystick2 = new Joystick();
+
+    // Register sub components
+    VirtualComponent *subcomponents[] = {
+        
+        cpu,
+        mem,
+        vic,
+        sid,
+        cia1, cia2,
+        iec,
+        expansionport,
+        floppy,
+        &datasette,
+        keyboard,
+        joystick1, joystick2,
+        NULL };
+    
+    registerSubComponents(subcomponents, sizeof(subcomponents));
+    setC64(this);
+    
+    // Register snapshot items
+    SnapshotItem items[] = {
+ 
+        { &warpLoad,        sizeof(warpLoad),           KEEP_ON_RESET },
+
+        { &alwaysWarp,      sizeof(alwaysWarp),         CLEAR_ON_RESET },
+        { &warp,            sizeof(warp),               CLEAR_ON_RESET },
+        { &cycles,          sizeof(cycles),             CLEAR_ON_RESET },
+        { &frame,           sizeof(frame),              CLEAR_ON_RESET },
+        { &rasterline,      sizeof(rasterline),         CLEAR_ON_RESET },
+        { &rasterlineCycle, sizeof(rasterlineCycle),    CLEAR_ON_RESET },
+        { NULL,             0,                          0 }};
+    
+    registerSnapshotItems(items, sizeof(items));
+
+    // Configure machine type and reset
+    setPAL();
+    reset();
+			
+    // Initialie mach timer info
+    mach_timebase_info(&timebase);
+
 	// Initialize snapshot ringbuffer (BackInTime feature)
 	for (unsigned i = 0; i < BACK_IN_TIME_BUFFER_SIZE; i++)
 		backInTimeHistory[i] = new Snapshot();	
 	backInTimeWritePtr = 0;
-    
-    // Configure machine type and reset
-    setPAL();
-    reset();
-    floppy->reset();
-
-	// Remove after debugging
-	cpu->max_traces = 20000;
-	cpu->trace_enable_address = 2070; 	
 }
 
 // Construction and destruction
@@ -147,67 +158,45 @@ C64::~C64()
 	halt();	
 		
 	// Release all components
+    delete joystick2;
+    delete joystick1;
 	delete floppy;
+    delete expansionport;
+    delete iec;
 	delete keyboard;
-	delete iec;
-	delete cia1;
 	delete cia2;
+	delete cia1;
+    delete sid;
 	delete vic;
-	delete sid;
-	delete cpu;	
+	delete cpu;
 	delete mem;
-	
-	if( joystick1 != NULL )
-		delete joystick1;
-	
-	if( joystick2 != NULL )
-		delete joystick2;
-		
-	debug(1, "Cleaned up virtual C64 at address %p\n", this);
+    
+	debug(1, "Cleaned up virtual C64\n", this);
 }
 
 void C64::reset()
 {
 	suspend();
 
-	debug (1, "Resetting virtual C64\n");
-	mem->reset();
-	cpu->reset();
-	cpu->setPC(0xFCE2);
-	vic->reset();
-	sid->reset();
-	cia1->reset();
-	cia2->reset();
-	keyboard->reset();
-	iec->reset();
-
-	cycles = 0UL;
-	frame = 0;
-	rasterline = 0;
-	rasterlineCycle = 1;
-	targetTime = 0UL;
-    frameDelayOffset = 0;
+    VirtualComponent::reset();
     
+    cpu->mem = mem;
+    cpu->setPC(0xFCE2);
+	rasterlineCycle = 1;
+    nanoTargetTime = 0UL;
+    
+    ping();
 	resume();
 }
 
-void C64::fastReset()
+
+void C64::ping()
 {
-    reset();
-	debug (1, "Resetting virtual C64 (fast reset via image file)\n");
-	
-	Snapshot *snapshot = Snapshot::snapshotFromFile("ResetImage.VC64");
+    debug (1, "Pinging virtual C64\n");
 
-	if (snapshot == NULL) {
-		warn("Could not read reset image\n");
-		return;
-	}
-	
-	suspend();
-	loadFromSnapshot(snapshot);
-	resume();
-
-	delete snapshot;
+    VirtualComponent::ping();
+    putMessage(MSG_WARP, warp);
+    putMessage(MSG_ALWAYS_WARP, alwaysWarp);
 }
 	
 void 
@@ -215,9 +204,9 @@ C64::dumpState() {
 	msg("C64:\n");
 	msg("----\n\n");
 	msg("            Machine type : %s\n", isPAL() ? "PAL" : "NTSC");
-	msg("       Frames per second : %d\n", getFramesPerSecond());
-	msg("   Rasterlines per frame : %d\n", getRasterlinesPerFrame()); 
-	msg("   Cycles per rasterline : %d\n", getCyclesPerRasterline());
+	msg("       Frames per second : %d\n", vic->getFramesPerSecond());
+	msg("   Rasterlines per frame : %d\n", vic->getRasterlinesPerFrame());
+	msg("   Cycles per rasterline : %d\n", vic->getCyclesPerRasterline());
 	msg("           Current cycle : %llu\n", cycles);
 	msg("           Current frame : %d\n", frame);
 	msg("      Current rasterline : %d\n", rasterline);
@@ -245,11 +234,10 @@ C64::setPAL()
 {
 	suspend();
 	
-    pal = true;
-    
-	vic->setPAL();
+    vic->setChipModel(VIC::MOS6569_PAL);
 	sid->setPAL();
 
+    debug(2, "Switching VIC chip model to MOS6569 (PAL)\n");
 	resume();
 }
 
@@ -257,30 +245,50 @@ void
 C64::setNTSC()
 {
 	suspend();
-	
-    pal = false;
-    
-	vic->setNTSC();
+	    
+    vic->setChipModel(VIC::MOS6567_NTSC);
 	sid->setNTSC();
 
+    debug(2, "Switching VIC chip model to MOS6567 (NTSC)\n");
 	resume();
 }
 
 void
 C64::setWarp(bool b)
 {
-	if (warp != b) {
-		warp = b;
-		restartTimer();
-		putMessage(MSG_WARP, b, NULL, NULL);
-	}
+    if (warp == b)
+        return;
+    
+    warp = b;
+
+    // Warping has the unavoidable drawback that audio playback gets out of sync.
+    // Therefore, we silence SID during warp mode and smoothly bring back sound when
+    // warping ends.
+    
+    if (warp) {
+        // Quickly fade out SID
+        sid->rampDown();
+        
+    } else {
+        // Smoothly fade in SID
+        sid->rampUp();
+        restartTimer();
+    }
+    
+    putMessage(MSG_WARP, b);
 }
 
 void
 C64::setAlwaysWarp(bool b)
 {
-	alwaysWarp = b;
-	setWarp(b);
+    if (alwaysWarp == b)
+        return;
+    
+    if (alwaysWarp != b) {
+        alwaysWarp = b;
+        setWarp(b);
+        putMessage(MSG_ALWAYS_WARP, b);
+    }
 }
 
 void
@@ -300,82 +308,22 @@ void C64::loadFromSnapshot(Snapshot *snapshot)
 
 	uint8_t *ptr = snapshot->getData();
 	loadFromBuffer(&ptr);
-	
-	if (snapshot->isPAL()) {
-		setPAL();
-	} else {
-		setNTSC();
-	}
-}
-
-void 
-C64::loadFromBuffer(uint8_t **buffer)
-{	
-	uint8_t *old = *buffer;
-		
-	debug(1, "Loading... ");
-	
-	// Load state of this component
-	cycles = read64(buffer);
-	frame = (int)read32(buffer);
-	rasterline = (int)read32(buffer);
-	rasterlineCycle = (int)read32(buffer);
-	targetTime = read64(buffer);
-	
-	// Load state of sub components
-	cpu->loadFromBuffer(buffer);
-	vic->loadFromBuffer(buffer);
-	sid->loadFromBuffer(buffer);
-	cia1->loadFromBuffer(buffer);
-	cia2->loadFromBuffer(buffer);	
-	mem->loadFromBuffer(buffer);
-	keyboard->loadFromBuffer(buffer);
-	iec->loadFromBuffer(buffer);
-	floppy->loadFromBuffer(buffer);
-
-	debug(1, "%d bytes.\n", *buffer - old);	
+    ping();
 }
 
 void 
 C64::saveToSnapshot(Snapshot *snapshot)
-{	
+{
 	if (snapshot == NULL)
 		return;
 	
 	snapshot->setTimestamp(time(NULL));
-	snapshot->setPAL(isPAL());
-	snapshot->takeScreenshot((uint32_t *)vic->screenBuffer());
+	// snapshot->setPAL(isPAL());
+	snapshot->takeScreenshot((uint32_t *)vic->screenBuffer(), isPAL());
 	
+    snapshot->alloc(stateSize());
 	uint8_t *ptr = snapshot->getData();
 	saveToBuffer(&ptr);
-}
-
-void 
-C64::saveToBuffer(uint8_t **buffer)
-{	
-	uint8_t *old = *buffer;
-		
-	debug(2, "Saving... ");
-		
-	// Save state of this component
-	write64(buffer, cycles);
-	write32(buffer, (uint32_t)frame);
-	write32(buffer, (uint32_t)rasterline);
-	write32(buffer, (uint32_t)rasterlineCycle);
-	write64(buffer, targetTime);
-	
-	// Save state of sub components
-	cpu->saveToBuffer(buffer);
-	vic->saveToBuffer(buffer);
-	sid->saveToBuffer(buffer);
-	cia1->saveToBuffer(buffer);
-	cia2->saveToBuffer(buffer);
-	mem->saveToBuffer(buffer);
-	keyboard->saveToBuffer(buffer);
-	iec->saveToBuffer(buffer);
-	floppy->saveToBuffer(buffer);
-	
-	debug(2, "%d bytes.\n", *buffer - old);	
 }
 
 
@@ -476,12 +424,13 @@ C64::step()
 #define EXECUTE(x) \
 		cia1->executeOneCycle(); \
 		cia2->executeOneCycle(); \
-		if (!cpu->executeOneCycle()) result = false; \
+        if (!cpu->executeOneCycle()) result = false; \
 		if (!floppy->executeOneCycle()) result = false; \
+        datasette.execute(); \
 		cycles++; \
-		rasterlineCycle++;
+        rasterlineCycle++;
 
-void 
+void
 C64::beginOfRasterline()
 {
 	// First cycle of rasterline
@@ -498,43 +447,49 @@ C64::endOfRasterline()
 	rasterlineCycle = 1;
 	rasterline++;
 
-	if (rasterline >= getRasterlinesPerFrame()) {
-		
-		// fprintf(stderr, "Last rasterline = %d\n", rasterline);
-		
+	if (rasterline >= vic->getRasterlinesPerFrame()) {
+        
 		// Last rasterline of frame
 		rasterline = 0;			
 		vic->endFrame();
 		frame++;
 
 		// Increment time of day clocks every tenth of a second
-		if (frame % (getFramesPerSecond() / 10) == 0) {
+		if (frame % (vic->getFramesPerSecond() / 10) == 0) {
 			cia1->incrementTOD();
 			cia2->incrementTOD();
 		}
 		
 		// Take a snapshot once in a while
-		if (frame % (getFramesPerSecond() * 4) == 0) {
+		if (frame % (vic->getFramesPerSecond() * 4) == 0) {
 			takeSnapshot();			
 		}
 		
-		// Pass control to the virtual sound chip
-		sid->execute(getCyclesPerFrame());
-			
-		// Pass control to the virtual IEC bus
-		iec->execute();
-			
-		// Sleep... 
-		if (!getWarp()) 
-			synchronizeTiming();
-	}
+		// Execute remaining SID cycles
+        sid->executeUntil(cycles);
+        /*
+        int diff = sid->resid->writePtr - sid->resid->readPtr;
+         debug(2,"SID readCnt: %8d writeCnt: %8d readPtr: %8d writePtr: %8d diff: %8d volume:%d target:%d\n",
+              sid->resid->readDataCnt, sid->resid->writeDataCnt,
+              sid->resid->readPtr, sid->resid->writePtr,
+              (diff > 0) ? diff : 44100 + diff,sid->resid->volume,sid->resid->targetVolume);
+         sid->resid->readDataCnt = sid->resid->writeDataCnt = 0;
+        */
+         
+        // Execute the IEC bus
+        iec->execute();
+
+        // Count some sheep (zzzzzz) ...
+        if (!getWarp())
+            synchronizeTiming();
+    }
 }
 
 inline bool
 C64::executeOneCycle()
 {
 	bool result = true; // Don't break execution
-	
+    
 	switch(rasterlineCycle) {
 		case 1:
 			beginOfRasterline();			
@@ -610,147 +565,147 @@ C64::executeOneCycle()
 			EXECUTE(18);
 			break;
 		case 19: 
-			vic->cycle19();
+			vic->cycle19to54();
 			EXECUTE(19);
 			break;
 		case 20: 
-			vic->cycle20();
+			vic->cycle19to54();
 			EXECUTE(20);
 			break;
 		case 21: 
-			vic->cycle21();
+			vic->cycle19to54();
 			EXECUTE(21);
 			break;
 		case 22: 
-			vic->cycle22();
+			vic->cycle19to54();
 			EXECUTE(22);
 			break;
 		case 23: 
-			vic->cycle23();
+			vic->cycle19to54();
 			EXECUTE(23);
 			break;
 		case 24: 
-			vic->cycle24();
+			vic->cycle19to54();
 			EXECUTE(24);
 			break;
 		case 25: 
-			vic->cycle25();
+			vic->cycle19to54();
 			EXECUTE(25);
 			break;
 		case 26: 
-			vic->cycle26();
+			vic->cycle19to54();
 			EXECUTE(26);
 			break;
 		case 27: 
-			vic->cycle27();
+			vic->cycle19to54();
 			EXECUTE(27);
 			break;
 		case 28: 
-			vic->cycle28();
+			vic->cycle19to54();
 			EXECUTE(28);
 			break;
 		case 29: 
-			vic->cycle29();
+			vic->cycle19to54();
 			EXECUTE(29);
 			break;
 		case 30: 
-			vic->cycle30();
+			vic->cycle19to54();
 			EXECUTE(30);
 			break;
 		case 31: 
-			vic->cycle31();
+			vic->cycle19to54();
 			EXECUTE(31);
 			break;
 		case 32: 
-			vic->cycle32();
+			vic->cycle19to54();
 			EXECUTE(32);
 			break;
 		case 33: 
-			vic->cycle33();
+			vic->cycle19to54();
 			EXECUTE(33);
 			break;
 		case 34: 
-			vic->cycle34();
+			vic->cycle19to54();
 			EXECUTE(34);
 			break;
 		case 35: 
-			vic->cycle35();
+			vic->cycle19to54();
 			EXECUTE(35);
 			break;
 		case 36: 
-			vic->cycle36();
+			vic->cycle19to54();
 			EXECUTE(36);
 			break;
 		case 37: 
-			vic->cycle37();
+			vic->cycle19to54();
 			EXECUTE(37);
 			break;
 		case 38: 
-			vic->cycle38();
+			vic->cycle19to54();
 			EXECUTE(38);
 			break;
 		case 39: 
-			vic->cycle39();
+			vic->cycle19to54();
 			EXECUTE(39);
 			break;
 		case 40: 
-			vic->cycle40();
+			vic->cycle19to54();
 			EXECUTE(40);
 			break;
 		case 41: 
-			vic->cycle41();
+			vic->cycle19to54();
 			EXECUTE(41);
 			break;
 		case 42: 
-			vic->cycle42();
+			vic->cycle19to54();
 			EXECUTE(42);
 			break;
 		case 43: 
-			vic->cycle43();
+			vic->cycle19to54();
 			EXECUTE(43);
 			break;
 		case 44: 
-			vic->cycle44();
+			vic->cycle19to54();
 			EXECUTE(44);
 			break;
 		case 45: 
-			vic->cycle45();
+			vic->cycle19to54();
 			EXECUTE(45);
 			break;
 		case 46: 
-			vic->cycle46();
+			vic->cycle19to54();
 			EXECUTE(46);
 			break;
 		case 47: 
-			vic->cycle47();
+			vic->cycle19to54();
 			EXECUTE(47);
 			break;
 		case 48: 
-			vic->cycle48();
+			vic->cycle19to54();
 			EXECUTE(48);
 			break;
 		case 49: 
-			vic->cycle49();
+			vic->cycle19to54();
 			EXECUTE(49);
 			break;
 		case 50: 
-			vic->cycle50();
+			vic->cycle19to54();
 			EXECUTE(50);
 			break;
 		case 51: 
-			vic->cycle51();
+			vic->cycle19to54();
 			EXECUTE(51);
 			break;
 		case 52: 
-			vic->cycle52();
+			vic->cycle19to54();
 			EXECUTE(52);
 			break;
 		case 53: 
-			vic->cycle53();
+			vic->cycle19to54();
 			EXECUTE(53);
 			break;
 		case 54: 
-			vic->cycle54();
+			vic->cycle19to54();
 			EXECUTE(54);
 			break;
 		case 55: 
@@ -788,7 +743,7 @@ C64::executeOneCycle()
 		case 63: 
 			vic->cycle63();
 			EXECUTE(63);
-			if (getCyclesPerRasterline() == 63) {
+			if (vic->getCyclesPerRasterline() == 63) {
 				// last cycle for PAL machines
 				endOfRasterline();
 			}			
@@ -808,6 +763,7 @@ C64::executeOneCycle()
 			assert(false);
 			return false;
 	}
+    
 	return result;
 }
 
@@ -815,7 +771,7 @@ C64::executeOneCycle()
 inline bool
 C64::executeOneLine()
 {
-	uint8_t lastCycle = getCyclesPerRasterline();
+	uint8_t lastCycle = vic->getCyclesPerRasterline();
 	for (int i = rasterlineCycle; i <= lastCycle; i++) {
 		if (!executeOneCycle())
 			return false;
@@ -883,7 +839,8 @@ C64::loadRom(const char *filename)
 void 
 C64::takeSnapshot() 
 {
-	// fprintf(stderr, "Taking snapshot\n");
+    debug(3, "Taking snapshop %d (%p)\n", backInTimeWritePtr, backInTimeHistory[backInTimeWritePtr]);
+    
 	saveToSnapshot(backInTimeHistory[backInTimeWritePtr]);
 	backInTimeWritePtr = (backInTimeWritePtr + 1) % BACK_IN_TIME_BUFFER_SIZE;
 }
@@ -921,25 +878,46 @@ C64::getHistoricSnapshot(int nr)
 
 void 
 C64::restartTimer() 
-{ 
-	targetTime = msec() + (uint64_t)getFrameDelay() + (uint64_t)getFrameDelayOffset();
+{
+    uint64_t kernelNow = mach_absolute_time();
+    uint64_t nanoNow = abs_to_nanos(kernelNow);
+    
+    nanoTargetTime = nanoNow + vic->getFrameDelay();
 }
 
 void 
 C64::synchronizeTiming()
 {
-	// determine how long we should wait
-	uint64_t timeToSleep = targetTime - msec();
-	
-	// update target time
-	targetTime += (uint64_t)getFrameDelay() + (uint64_t)getFrameDelayOffset();
-	
-	// sleep
-	if (timeToSleep > 0) {
-		sleepMicrosec(timeToSleep);
-	} else {
-		restartTimer();
-	}
+    const uint64_t earlyWakeup = 1500000; /* 1.5 milliseconds */
+
+    // Convert usec into kernel unit
+    uint64_t kernelTargetTime = nanos_to_abs(nanoTargetTime);
+
+    // Check how long we're supposed to sleep
+    if (kernelTargetTime - mach_absolute_time() > 200000000 /* 0.2 sec */) {
+
+        // The emulator is supposed to sleep unusually long. Timers seem to
+        // be out of sync, so we better reset the synchronization timer
+        
+        debug(2, "Emulator lost synchronization. Restarting synchronization timer.\n");
+        restartTimer();
+        return;
+    }
+
+    // Sleep and update target timer
+    // debug(2, "%p Sleeping for %lld\n", this, kernelTargetTime - mach_absolute_time());
+    int64_t jitter = sleepUntil(kernelTargetTime, earlyWakeup);
+    nanoTargetTime += vic->getFrameDelay();
+
+    // debug(2, "Jitter = %d", jitter);
+    if (jitter > 1000000000 /* 1 sec */) {
+        
+        // The emulator did not keep up with the real time clock. Instead of
+        // running behind for a long time, we reset the synchronization timer
+        
+        debug(2, "Jitter exceeds limit. Restarting synchronization timer.\n"); 
+        restartTimer();
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -970,15 +948,28 @@ C64::flushArchive(Archive *a, int item)
 }
 
 bool 
-C64::mountArchive(D64Archive *a)
+C64::mountArchive(Archive *a)
 {	
 	if (a == NULL)
 		return false;
 		
-	floppy->insertDisc(a);	
+	floppy->insertDisk(a);
 	return true;
 }
 
+bool
+C64::insertTape(TAPArchive *a)
+{
+    if (a == NULL)
+        return false;
+    
+    suspend();
+    debug("Inserting tape %p\n", a);
+    datasette.insertTape(a);
+    resume();
+    
+    return true;
+}
 
 // ---------------------------------------------------------------------------------------------
 //                                            Cartridges
@@ -987,174 +978,25 @@ C64::mountArchive(D64Archive *a)
 bool
 C64::attachCartridge(Cartridge *c)
 {
-	mem->attachCartridge(c);
-	
-	putMessage(MSG_CARTRIDGE, 1);
-	return true;
+    return expansionport->attachCartridge(c);
 }
 
-bool
+void
 C64::detachCartridge()
 {
-	mem->detachCartridge();
-
-	putMessage(MSG_CARTRIDGE, 0);
-	return true;
+    expansionport->detachCartridge();
 }
 
 bool
 C64::isCartridgeAttached()
 {
- 	return mem->isCartridgeAttached();
+    return expansionport->getCartridgeAttached();
 }
 
 
 // ---------------------------------------------------------------------------------------------
 //                                            Misc
 // ---------------------------------------------------------------------------------------------
-
-int 
-C64::build()
-{
-	char month[11];
-	int year, mon, day;
-
-	sscanf(__DATE__, "%s %d %d", month, &day, &year);
-	
-	if (!strcmp(month, "Jan")) mon = 1;
-	else if (!strcmp(month, "Feb")) mon = 2;
-	else if (!strcmp(month, "Mar")) mon = 3;
-	else if (!strcmp(month, "Apr")) mon = 4;
-	else if (!strcmp(month, "May")) mon = 5;
-	else if (!strcmp(month, "Jun")) mon = 6;
-	else if (!strcmp(month, "Jul")) mon = 7;
-	else if (!strcmp(month, "Aug")) mon = 8;
-	else if (!strcmp(month, "Sep")) mon = 9;
-	else if (!strcmp(month, "Oct")) mon = 10;
-	else if (!strcmp(month, "Nov")) mon = 11;
-	else if (!strcmp(month, "Dez")) mon = 12;
-	else mon = 0; // Huh?
-
-	return ((year - 2000) * 10000) + (mon * 100) + day;
-}
-
-void
-C64::setInputDevice(int portNo, int newDevice) 
-{			
-	port[portNo] = newDevice;
-	
-	// Update CIA structure
-	switch(newDevice) {
-		case IPD_UNCONNECTED:
-			cia1->setJoystickToPort( portNo, NULL );
-			cia1->setKeyboardToPort( portNo, false );
-			break;
-			
-		case IPD_KEYBOARD: 
-			cia1->setJoystickToPort( portNo, NULL );
-			cia1->setKeyboardToPort( portNo, true );
-			break;
-			
-		case IPD_JOYSTICK_1: 
-			cia1->setJoystickToPort( portNo, joystick1 );
-			cia1->setKeyboardToPort( portNo, false );
-			break;
-			
-		case IPD_JOYSTICK_2: 
-			cia1->setJoystickToPort( portNo, joystick2 );
-			cia1->setKeyboardToPort( portNo, false );
-			break;
-			
-		default:
-			assert(false);
-	}
-}
-
-void
-C64::switchInputDevice( int portNo ) 
-{
-	int newDevice = port[portNo];
-	bool invalid;
-			
-	assert(portNo == 0 || portNo == 1);
-
-	do {
-		newDevice = (newDevice + 1) % NUM_INPUT_DEVICES;
-	
-		if (newDevice == IPD_JOYSTICK_1 && !joystick1->IsActive())
-			invalid = true;
-		else if (newDevice == IPD_JOYSTICK_2 && !joystick2->IsActive())
-			invalid = true;
-		else 
-			invalid = false;
-	} while (invalid);
-				
-	setInputDevice(portNo, newDevice);
-}
-
-void 
-C64::switchInputDevices()
-{
-	debug(1, "Switching input devides\n");
-	int tmp_port = port[0];
-	port[0] = port[1];
-	port[1] = tmp_port;
-}
-
-int
-C64::getDeviceOfPort( int portNo ) {
-	return port[portNo];
-}
-
-Joystick *C64::addJoystick()
-{
-	if( !joystick1->IsActive())
-	{
-		joystick1->SetActiveState( true );
-		return joystick1;
-	}
-	else if( !joystick2->IsActive() )
-	{
-		joystick2->SetActiveState( true );
-		return joystick2;
-	}
-	else
-		throw( "Joystick 1 and 2 are allready assigned!" );
-}
-
-void C64::removeJoystick( Joystick *joystick )
-{
-	assert( (joystick == joystick1) || (joystick == joystick2) );
-	
-	if( joystick == joystick1 )
-	{
-		if( !joystick1->IsActive() )
-			throw( "Joystick1 is not assigned" );
-		
-		if( getDeviceOfPort( 0 ) == IPD_JOYSTICK_1 )
-			setInputDevice( 0, IPD_UNCONNECTED );
-		
-		if( getDeviceOfPort( 1 ) == IPD_JOYSTICK_1 )
-			setInputDevice( 1, IPD_UNCONNECTED ); 
-		
-		joystick1->SetActiveState( false );
-	}
-	else if( joystick == joystick2 )
-	{
-		if( !joystick2->IsActive() )
-			throw( "Joystick2 is not assigned" );
-		
-		if( getDeviceOfPort( 0 ) == IPD_JOYSTICK_2 )
-			setInputDevice( 0, IPD_UNCONNECTED );
-		
-		if( getDeviceOfPort( 1 ) == IPD_JOYSTICK_2 )
-			setInputDevice( 1, IPD_UNCONNECTED ); 
-		
-		joystick2->SetActiveState( false );
-	}
-	else
-		throw( "Invalid joystick" );
-}
 
 void 
 C64::threadCleanup()

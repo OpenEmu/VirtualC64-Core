@@ -1,5 +1,5 @@
 /*
- * (C) 2006 Dirk W. Hoffmann. All rights reserved.
+ * Author: Dirk W. Hoffmann, 2006 - 2015
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,7 +16,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// Last review: 25.7.06
 
 #ifndef _CPU_INC
 #define _CPU_INC
@@ -29,8 +28,14 @@ class IEC;
 //! The virtual 6510 processor
 class CPU : public VirtualComponent {
 
-public:	
-	//! Addressing modes of the 6510 processor
+public:
+    //! Processor models
+    enum ChipModel {
+        MOS6510 = 0,
+        MOS6502 = 1
+    };
+
+	//! Addressing modes
 	enum AddressingMode { 
 		ADDR_IMPLIED,
 		ADDR_ACCUMULATOR,
@@ -54,7 +59,7 @@ public:
 	by the CPU. Once the CPU enters a different state than CPU_OK, the execution thread is terminated. 
 	*/ 
 	enum ErrorState {
-		OK,
+		OK = 0,
 		SOFT_BREAKPOINT_REACHED,
 		HARD_BREAKPOINT_REACHED,
 		ILLEGAL_INSTRUCTION
@@ -74,10 +79,10 @@ public:
 	};
 
 	//! Clock frequency of the original C64 (NTSC version) in Hz
-	static const uint32_t CLOCK_FREQUENCY_NTSC = 1022700;
+	static const uint32_t CLOCK_FREQUENCY_NTSC = 1022727;
 	
 	//! Clock frequency of the original C64 (PAL version) in Hz
-	static const uint32_t CLOCK_FREQUENCY_PAL = 985248;
+	static const uint32_t CLOCK_FREQUENCY_PAL = 985249;
 	
 	//! Bit position of the Negative flag
 	static const uint8_t N_FLAG = 0x80;
@@ -96,14 +101,17 @@ public:
 	
 public:
 
-	//! Reference to the connected virtual C64
-	C64 *c64;
-
 	//! Reference to the connected virtual memory
 	Memory *mem;
-	
-private:
 
+    /*! @brief    Selected chip model
+     *  @abstract Right now, this atrribute is only used to distinguish the C64 CPU (MOS6510) from the
+     *            VC1541 CPU (MOS6502). Hardware differences between the two processors are not emulated.
+     */
+    ChipModel chipModel;
+
+private:
+    
 	// Accumulator register
 	uint8_t A;
 	// X register
@@ -163,8 +171,10 @@ private:
 	//! Experimental
 	uint8_t external_port_bits;
 	
-	//! RDY line (ready line).
-	/*! If pulled low (set to 0), the CPU freezes. The signal is used by the VIC chip to freeze the CPU during memory access. */
+	//! RDY line (ready line)
+	/*! If this line is LOW, the CPU freezes on the next read access.
+        RDY is pulled down by VIC to perform longer lasting read operations.
+    */
 	bool rdyLine;
 	
 	//! IRQ line (maskable interrupts)
@@ -182,11 +192,15 @@ private:
 	*/
 	uint8_t nmiLine; 
 	
-	//! Indicates the occurance of a negative edge on the NMI line
+	//! Indicates the occurance of an interrupt triggering edge on the NMI line
 	/*! The variable is set to 1, when the value of variable nmiLine is changed from 0 to another value. The variable is
 	    used to determine when an NMI interrupt needs to be triggered. */
-	bool nmiNegEdge;
+	bool nmiEdge;
 	
+    //! Indicates if the CPU has to check for pending interrupts in its fetch phase
+    /*! This variable has beed introduced for speedup. At all times, it is equivalent to "(irqLine || nmiEdge)" */
+    bool interruptsPending;
+    
 	//! This variable is set when a negative edge occurs on the irq line and stores the next cycle in which an IRQ can occur.
 	/*! The value is needed to determine the exact time to trigger the interrupt */
 	uint64_t nextPossibleIrqCycle;
@@ -197,7 +211,7 @@ private:
 		
 	//! Current error state
 	ErrorState errorState;
-
+    
 	//! Next function to be executed
 	/*! Each function performs the actions of a single cycle */
 	void (CPU::*next)(void);
@@ -226,21 +240,7 @@ private:
 	    determines whether an interrupt is triggered or not. To handle timing correctly, the previous value of I is stored in 
 		variable oldI whenever SEI or CLI is executed. */
 	bool IRQsAreBlocked();
-	
-public: 
-	// Enable auto trace
-	int autotracing;
-	
-	// Auto enable trace when reaching this address
-	uint16_t trace_enable_address;
-	
-	// Trace counter
-	int current_trace;
-	
-	// How many instructions should be traced?
-	int max_traces;
 
-	
 #include "Instructions.h"
 		
 public:
@@ -254,6 +254,9 @@ public:
 	// Brings CPU back to its initial state
 	void reset();
 
+    //! Size of internal state
+    uint32_t stateSize();
+
 	//! Load state
 	void loadFromBuffer(uint8_t **buffer);
 	
@@ -263,11 +266,8 @@ public:
 	//! Dump internal state to console
 	void dumpState();	
 
-	//! Binds CPU and C64 together
-	void setC64(C64 *c) { assert(c64 == NULL); c64 = c; }
-
-	//! Binds CPU and memory together
-	void setMemory(Memory *m) { assert(mem == NULL); mem = m; }
+    // Returns true iff this object is the C64 CPU (for debugging, only)
+    bool isC64CPU() { return strcmp(name, "CPU") == 0; /* VC1541 CPU is calles "1541CPU" */ }
 		
 	//! Get value of processor port
 	inline uint8_t getPort() { return port; }
@@ -284,9 +284,9 @@ public:
 	
 	//! Returns current value of the accumulator register
 	inline uint8_t getA() { return A; };
-	//! Returns current value of the X register
+	//! Returns current value of the X register
 	inline uint8_t getX() { return X; };
-	//! Returns current value of the Y register
+	//! Returns current value of the Y register
 	inline uint8_t getY() { return Y; };
 	//! Returns current value of the program counter
 	inline uint16_t getPC() { return PC; };
@@ -319,9 +319,10 @@ public:
 	/*! The bit position of the B flag is always 0. This function is needed for proper interrupt handling. When an IRQ
 		or NMI is triggered internally, the status register is pushed on the stack with the B-flag cleared. */
 	inline uint8_t getPWithClearedB() { return getN() | getV() | 32 | getD() | getI() | getZ() | getC(); }
-	//! Pack CPU state
-	//inline uint64_t packState() { return (((((((((((uint64_t)PC << 8) | SP) << 8) | getP()) << 8) | A) << 8) | X) << 8) | Y); }
 	
+    //! Return current opcode
+    inline uint8_t getOpcode() { return opcode; }
+    
 	//! Write value to the accumulator register. Flags remain untouched.
 	inline void setA(uint8_t a) { A = a; }
 	//! Write value to the the X register. Flags remain untouched.
@@ -382,7 +383,7 @@ public:
 	void setIRQLine(uint8_t bit);
 	
 	//! Clear bit of IRQ line
-	inline void clearIRQLine(uint8_t bit) { irqLine &= (0xff - bit); }
+    inline void clearIRQLine(uint8_t bit) { irqLine &= (~bit); interruptsPending = irqLine || nmiEdge; }
 		
 	//! Get bit of IRQ line
 	inline uint8_t getIRQLine(uint8_t bit) { return irqLine & bit; }
@@ -392,7 +393,13 @@ public:
 	
 	//! Set bit of NMI line
 	void setNMILine(uint8_t bit);
-	
+
+    //! Indicate a negative edge on the NMI line
+    void setNMIEdge();
+
+    //! Remove negative edge indicator for the NMI line
+    void clearNMIEdge();
+
 	//! Clear bit of NMI line
 	inline void clearNMILine(uint8_t bit) { nmiLine &= (0xff - bit); }
 	
@@ -408,22 +415,22 @@ public:
 	inline void setIRQLineCIA() { setIRQLine(0x01); }
 	//! Set VIC bit of IRQ line
 	inline void setIRQLineVIC() { setIRQLine(0x02); }
-	//! Set VIA 1 bit of IRQ line (1541 drive)
-	inline void setIRQLineVIA1() { setIRQLine(0x10); }
+    //! Set VIA bit of IRQ line (1541 drive)
+    inline void setIRQLineVIA() { setIRQLine(0x10); }
+    //! Set VIA 1 bit of IRQ line (1541 drive)
+	// inline void setIRQLineVIA1() { setIRQLine(0x10); }
 	//! Set VIA 2 bit of IRQ line (1541 drive)
-	inline void setIRQLineVIA2() { setIRQLine(0x20); }
+	// inline void setIRQLineVIA2() { setIRQLine(0x20); }
 	//! Set ATN bit of IRQ line (1541 drive)
 	inline void setIRQLineATN() { setIRQLine(0x40); }
 	//! Clear CIA bit of IRQ line
-	inline void clearIRQLineCIA() { clearIRQLine(0x01); }	
+	inline void clearIRQLineCIA() { clearIRQLine(0x01); }
 	//! Clear VIC bit of IRQ line
 	inline void clearIRQLineVIC() { clearIRQLine(0x02); }	
-	//! Clear VIA 1 bit of IRQ line (1541 drive)
-	inline void clearIRQLineVIA1() { clearIRQLine(0x10); }	
-	//! Clear VIA 2 bit of IRQ line (1541 drive)
-	inline void clearIRQLineVIA2() { clearIRQLine(0x20); }	
+    //! Clear VIA 1 bit of IRQ line (1541 drive)
+    inline void clearIRQLineVIA() { clearIRQLine(0x10); }
 	//! Clear ATN bit of IRQ line (1541 drive)
-	inline void clearIRQLineATN() { clearIRQLine(0x40); }	
+	inline void clearIRQLineATN() { clearIRQLine(0x40); }	 // DEPRECATED
 	
 	//! Get CIA bit of NMI line
 	inline uint8_t getNMILineCIA() { return getNMILine(0x01); }		
@@ -435,7 +442,9 @@ public:
 	inline void setNMILineReset() { setNMILine(0x08); }	
 	//! Clear Reset bit of NMI line
 	inline void clearNMILineReset() { clearNMILine(0x08); }
-	//! Set RDY line 
+    //! Get RDY line
+    inline bool getRDY() { return rdyLine; }
+	//! Set RDY line
 	inline void setRDY(bool value) { rdyLine = value; }
 		
 	//! Returns the three letter mnemonic for a given opcode
@@ -470,11 +479,14 @@ public:
 	inline bool executeOneCycle() { (*this.*next)(); return errorState == CPU::OK; }
 
 	//! Returns the current error state
-	ErrorState getErrorState();
+    inline ErrorState getErrorState() { return errorState; }
+    
 	//! Sets the current error state
-	void setErrorState(ErrorState state);
-	//! Reset the error state to "OK"
-	void clearErrorState();
+    void setErrorState(ErrorState state);
+    
+	//! Sets the error state back to normal
+    void clearErrorState() { setErrorState(OK); }
+    
 	//! Return breakpoint tag for the specified address
 	inline uint8_t getBreakpointTag(uint16_t addr) { return breakpoint[addr]; }
 	

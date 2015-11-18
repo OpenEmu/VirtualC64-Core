@@ -26,96 +26,92 @@ ReSID::ReSID()
 
     sid = new SID();
     
-    // Default chip model
-    chipModel = MOS8580;
-    sid->set_chip_model(chipModel);
+    // Register snapshot items
+    SnapshotItem items[] = {
         
-    // Default audio filter settings
-    audioFilter = false;
-    sid->enable_filter(audioFilter);
-    sid->enable_external_filter(false);
-    	
-    // Default sample parameters
-	sampleRate = 44100;
-    cpuFrequency = CPU::CLOCK_FREQUENCY_PAL; 
+        // Configuration items
+        { &chipModel,           sizeof(chipModel),              KEEP_ON_RESET },
+        { &sampleRate,          sizeof(sampleRate),             KEEP_ON_RESET },
+        { &samplingMethod,      sizeof(samplingMethod),         KEEP_ON_RESET },
+        { &cpuFrequency,        sizeof(cpuFrequency),           KEEP_ON_RESET },
+        { &audioFilter,         sizeof(audioFilter),            KEEP_ON_RESET },
+        { &externalAudioFilter, sizeof(externalAudioFilter),    KEEP_ON_RESET },
+        { &volume,              sizeof(volume),                 KEEP_ON_RESET },
+        { &targetVolume,        sizeof(targetVolume),           KEEP_ON_RESET },
+        
+        // ReSID state
+        { st.sid_register,                  sizeof(st.sid_register),                    KEEP_ON_RESET },
+        { &st.bus_value,                    sizeof(st.bus_value),                       KEEP_ON_RESET },
+        { &st.bus_value_ttl,                sizeof(st.bus_value_ttl),                   KEEP_ON_RESET },
+        { &st.accumulator[0],               sizeof(st.accumulator[0]),                  KEEP_ON_RESET },
+        { &st.accumulator[1],               sizeof(st.accumulator[1]),                  KEEP_ON_RESET },
+        { &st.accumulator[2],               sizeof(st.accumulator[2]),                  KEEP_ON_RESET },
+        { &st.shift_register[0],            sizeof(&st.shift_register[0]),              KEEP_ON_RESET },
+        { &st.shift_register[1],            sizeof(&st.shift_register[1]),              KEEP_ON_RESET },
+        { &st.shift_register[2],            sizeof(&st.shift_register[2]),              KEEP_ON_RESET },
+        { &st.rate_counter[0],              sizeof(st.rate_counter[0]),                 KEEP_ON_RESET },
+        { &st.rate_counter[1],              sizeof(st.rate_counter[1]),                 KEEP_ON_RESET },
+        { &st.rate_counter[2],              sizeof(st.rate_counter[2]),                 KEEP_ON_RESET },
+        { &st.rate_counter_period[0],       sizeof(st.rate_counter_period[0]),          KEEP_ON_RESET },
+        { &st.rate_counter_period[1],       sizeof(st.rate_counter_period[1]),          KEEP_ON_RESET },
+        { &st.rate_counter_period[2],       sizeof(st.rate_counter_period[2]),          KEEP_ON_RESET },
+        { &st.exponential_counter[0],       sizeof(st.exponential_counter[0]),          KEEP_ON_RESET },
+        { &st.exponential_counter[1],       sizeof(st.exponential_counter[1]),          KEEP_ON_RESET },
+        { &st.exponential_counter[2],       sizeof(st.exponential_counter[2]),          KEEP_ON_RESET },
+        { &st.exponential_counter_period[0],sizeof(st.exponential_counter_period[0]),   KEEP_ON_RESET },
+        { &st.exponential_counter_period[1],sizeof(st.exponential_counter_period[1]),   KEEP_ON_RESET },
+        { &st.exponential_counter_period[2],sizeof(st.exponential_counter_period[2]),   KEEP_ON_RESET },
+        { &st.envelope_counter[0],          sizeof(st.envelope_counter[0]),             KEEP_ON_RESET },
+        { &st.envelope_counter[1],          sizeof(st.envelope_counter[1]),             KEEP_ON_RESET },
+        { &st.envelope_counter[2],          sizeof(st.envelope_counter[2]),             KEEP_ON_RESET },
+        { &st.envelope_state[0],            sizeof(st.envelope_state[0]),               KEEP_ON_RESET },
+        { &st.envelope_state[1],            sizeof(st.envelope_state[1]),               KEEP_ON_RESET },
+        { &st.envelope_state[2],            sizeof(st.envelope_state[2]),               KEEP_ON_RESET },
+        { &st.hold_zero[0],                 sizeof(st.hold_zero[0]),                    KEEP_ON_RESET },
+        { &st.hold_zero[1],                 sizeof(st.hold_zero[1]),                    KEEP_ON_RESET },
+        { &st.hold_zero[2],                 sizeof(st.hold_zero[2]),                    KEEP_ON_RESET },
+        
+        { NULL,                             0,                                          0 }};
+    
+    registerSnapshotItems(items, sizeof(items));
+    
+    // Set default values
+    setChipModel(MOS6581); 
+    
+    cpuFrequency = PAL_CYCLES_PER_FRAME * PAL_REFRESH_RATE;
     samplingMethod = SAMPLE_FAST;
+    sampleRate = 44100;
     sid->set_sampling_parameters(cpuFrequency, samplingMethod, sampleRate);
-					
-	// init ringbuffer
-	bufferSize = 12288;
-	ringBuffer = new float[bufferSize];
-	endBuffer = &ringBuffer[(bufferSize - 1)];
+    
+    setAudioFilter(false);
+    setExternalAudioFilter(false);
+    
+    volume = 100000;
+    targetVolume = 100000;
 }
 
 ReSID::~ReSID()
 {
     delete sid;
-	delete ringBuffer;
-	ringBuffer = writeBuffer = readBuffer = endBuffer = NULL;
 }
 
 void
-ReSID::reset() 
+ReSID::reset()
 {
-	debug(2, "  Resetting ReSID...\n");
-	
-	// reset ringBuffer
-	for (unsigned i = 0; i < bufferSize; i++)
-	{
-		ringBuffer[i] = 0.0f;
-	}
-	readBuffer = ringBuffer;
-	writeBuffer = ringBuffer;	
+    VirtualComponent::reset();
+    clearRingbuffer();
+    sid->reset();
 }
 
-void 
-ReSID::setAudioFilter(bool enable)
-{
-    audioFilter = enable;
-    sid->enable_filter(enable);
-}
-
-void 
-ReSID::setSampleRate(uint32_t sr) 
-{
-	sampleRate = sr;
-    sid->set_sampling_parameters(cpuFrequency, samplingMethod, sampleRate);
-}
-
-void 
-ReSID::setSamplingMethod(sampling_method method)
-{
-    switch (method) {
-        case SAMPLE_FAST:
-            debug("Using sample method SAMPLE_FAST\n");
-            break;
-        case SAMPLE_INTERPOLATE:
-            debug("Using sample method SAMPLE_INTERPOLATE\n");
-            break;
-        case SAMPLE_RESAMPLE_INTERPOLATE:
-            debug("Using sample method SAMPLE_RESAMPLE_INTERPOLATE\n");
-            break;
-        case SAMPLE_RESAMPLE_FAST:
-            debug("Using sample method SAMPLE_RESAMPLE_FAST\n");
-            break;
-        default:
-            warn("Unknown sample method. Using SAMPLE_FAST\n");
-            method = SAMPLE_FAST;
-    }
-    
-    samplingMethod = method;
-    sid->set_sampling_parameters(cpuFrequency, samplingMethod, sampleRate); 
-}
-
-void 
+void
 ReSID::setChipModel(chip_model model)
 {
     switch (model) {
         case MOS6581:
-            debug("Plugging in MOS6581\n");
+            debug(2, "Plugging in MOS6581\n");
             break;
         case MOS8580:
-            debug("Plugging in MOS8580\n");
+            debug(2, "Plugging in MOS8580\n");
             break;
         default:
             warn("Unknown chip model. Using  MOS8580\n");
@@ -127,29 +123,90 @@ ReSID::setChipModel(chip_model model)
 }
 
 void 
+ReSID::setAudioFilter(bool enable)
+{
+    audioFilter = enable;
+    sid->enable_filter(enable);
+}
+
+void
+ReSID::setExternalAudioFilter(bool enable)
+{
+    externalAudioFilter = enable;
+    sid->enable_external_filter(enable);
+}
+
+void 
+ReSID::setSamplingMethod(sampling_method method)
+{
+    switch (method) {
+        case SAMPLE_FAST:
+            debug(2, "Using sample method SAMPLE_FAST\n");
+            break;
+        case SAMPLE_INTERPOLATE:
+            debug(2, "Using sample method SAMPLE_INTERPOLATE\n");
+            break;
+        case SAMPLE_RESAMPLE_INTERPOLATE:
+            debug(2, "Using sample method SAMPLE_RESAMPLE_INTERPOLATE\n");
+            break;
+        case SAMPLE_RESAMPLE_FAST:
+            debug(2, "Using sample method SAMPLE_RESAMPLE_FAST\n");
+            break;
+        default:
+            warn("Unknown sample method. Using SAMPLE_FAST\n");
+            method = SAMPLE_FAST;
+    }
+    
+    samplingMethod = method;
+    sid->set_sampling_parameters(cpuFrequency, samplingMethod, sampleRate); 
+}
+
+void
+ReSID::setSampleRate(uint32_t sr)
+{
+    sampleRate = sr;
+    sid->set_sampling_parameters(cpuFrequency, samplingMethod, sampleRate);
+}
+
+void 
 ReSID::setClockFrequency(uint32_t frequency)
 { 
 	cpuFrequency = frequency;
     sid->set_sampling_parameters(cpuFrequency, samplingMethod, sampleRate);
 }
 
-void 
+
+void
 ReSID::loadFromBuffer(uint8_t **buffer)
 {
-	debug(2, "  Loading ReSID state...\n");
+    VirtualComponent::loadFromBuffer(buffer);
 
-    debug(1, "IMPLEMENTATION MISSING");
+    // reset();
+    clearRingbuffer();
+
+    /*
+    setChipModel(chipModel);
+    setSampleRate(sampleRate);
+    setSamplingMethod(samplingMethod);
+    setAudioFilter(audioFilter);
+    setExternalAudioFilter(externalAudioFilter);
+    setClockFrequency(cpuFrequency);
+    */
+    
+    // Push state to reSID
+    sid->write_state(st);
 }
 
 void
 ReSID::saveToBuffer(uint8_t **buffer)
 {
-	debug(2, "  Saving ReSID state...\n");
-
-    debug(1, "IMPLEMENTATION MISSING");
+    // Pull state from reSID
+    st = sid->read_state();
+    
+    VirtualComponent::saveToBuffer(buffer);
 }
 
-uint8_t 
+uint8_t
 ReSID::peek(uint16_t addr)
 {	
     return sid->read(addr);
@@ -158,10 +215,11 @@ ReSID::peek(uint16_t addr)
 void 
 ReSID::poke(uint16_t addr, uint8_t value)
 {
+    // addr &= 0x1F;
     sid->write(addr, value);
 }
 
-bool 
+void
 ReSID::execute(int elapsedCycles)
 {
     short buf[2049];
@@ -169,90 +227,121 @@ ReSID::execute(int elapsedCycles)
     int delta_t = elapsedCycles;
     int bufindex = 0;
     
-    //if (isHalted()) return true;
-    
-    // TODO: SPEEDUP: Write directly into ringbuffer
+    // TODO: Can't we write directly into Core Audios ringbuffer (for Speedup)?
+
+    // Let reSID compute some sound samples
     while (delta_t) {
         bufindex += sid->clock(delta_t, buf + bufindex, buflength - bufindex);
-
-        // write to ringbuffer
-        for (int i = 0; i < bufindex; i++) {
-            float sample = (float)buf[i] * 0.000005f; 
-            writeData(sample);
-            // if (sample != 0) fprintf(stderr,"Sample %d\n", buf[i]);
-        }
-        // fprintf(stderr,"wrote %d samples\n", bufindex);
-        bufindex = 0;
+        // if (delta_t != 0) debug(2, "delta_t = %d\n", delta_t);
     }
-        
-    return true;
+    
+    // Write samples into ringbuffer (output is silenced in warp mode) 
+    
+    // float volume = c64->getWarp() ? 0.0f : 0.000005f;
+    for (int i = 0; i < bufindex; i++) {
+        writeData((float)buf[i]);
+    }
+
+    // fprintf(stderr,"wrote %d samples\n", bufindex);
 }
 
 void 
 ReSID::run()
 {
-    handleBufferException();
+    clearRingbuffer();
 }
 
 void 
 ReSID::halt()
 {
-    // clear ringBuffer
-	for (unsigned i = 0; i < bufferSize; i++)
-	{
-		ringBuffer[i] = 0.0f;
-	}
+    clearRingbuffer();
 }
 
-void 
-ReSID::handleBufferException()
-{    
-    // Reset pointers
-    readBuffer = writeBuffer = ringBuffer;
+void
+ReSID::clearRingbuffer()
+{
+    debug(4,"Clearing ringbuffer\n");
 
-    // Add some delay
-    size_t delay = 8*735;
-    memset(ringBuffer, 0, delay * sizeof(float)); 
-    writeBuffer += delay;
-}
-
-float 
-ReSID::readData()
-{	
-	float value;
-    
-    if (readBuffer == writeBuffer) {
-        // fprintf(stderr, "SID RINGBUFFER UNDERFLOW (%d)\n", readBuffer - ringBuffer);
-        handleBufferException();
+    // Reset ringbuffer contents
+    for (unsigned i = 0; i < bufferSize; i++) {
+        ringBuffer[i] = 0.0f;
     }
-
-    value = *readBuffer;
     
-    if (readBuffer == endBuffer)
-        readBuffer = ringBuffer;
-    else 
-        readBuffer++;
+    // Reset read pointer and put write pointer somewhat ahead
+    readPtr = 0;
+    alignWritePtr();
+}
+
+float
+ReSID::readData()
+{
+    readDataCnt++;
+    
+    // Check for buffer underflow
+    if (readPtr == writePtr)
+        debug(4, "SID RINGBUFFER UNDERFLOW (%ld)\n", readPtr);
+    
+    // Read sound sample
+    float value = ringBuffer[readPtr];
+    
+    // Adjust volume
+    if (volume != targetVolume) {
+        if (volume < targetVolume) {
+            volume += MIN(volumeDelta, targetVolume - volume);
+        } else {
+            volume -= MIN(volumeDelta, volume - targetVolume);
+        }
+    }
+    value = (volume <= 0) ? 0.0f : value * (float)volume / 100000.0f;
+    
+    // Advance read pointer
+    readPtr++;
+    if (readPtr == bufferSize)
+        readPtr = 0;
 
 	return value;
 }
-	
-void 
+
+inline void
 ReSID::writeData(float data)
 {
-    if (readBuffer == writeBuffer) {
-        // fprintf(stderr, "SID RINGBUFFER OVERFLOW (%d)\n", writeBuffer - ringBuffer);
-        handleBufferException();
-    }
-
-    *writeBuffer = data;
+    writeDataCnt++;
     
-    if (writeBuffer == endBuffer)
-        writeBuffer = ringBuffer;
-    else 
-        writeBuffer++;
+    // Check for buffer overflow
+    if (readPtr == writePtr) {
+
+        debug(4, "SID RINGBUFFER OVERFLOW (%ld)\n", writePtr);
+        
+        if (!c64->getWarp()) // In real-time mode, we put the write ptr somewhat ahead of the read ptr
+            alignWritePtr();
+        else
+            return; // In warp mode, we don't advance the write ptr to avoid crack noises
+    }
+    
+#if 0
+    // Adjust volume
+    if (volume != targetVolume) {
+        if (volume < targetVolume) {
+            volume += MIN(volumeDelta, targetVolume - volume);
+        } else {
+            volume -= MIN(volumeDelta, volume - targetVolume);
+        }
+    }
+#endif 
+    
+    // Write sound sample
+    // float scale = (volume <= 0) ? 0.0f : 0.000005f * (float)volume / 100000.0f;
+    float scale = 0.000005f;
+    ringBuffer[writePtr] = data * scale;
+    
+    // Advance write pointer
+    writePtr++;
+    if (writePtr == bufferSize)
+        writePtr = 0;
 }
-	
-void 
+
+
+void
 ReSID::dumpState()
 {
 	msg("SID\n");

@@ -21,40 +21,42 @@
 Container::Container()
 {
 	path = NULL;
-	name = NULL;
+    memset(name, 0, sizeof(name));
 }
 
 Container::~Container()
 {
 	if (path)
 		free(path);
-
-	if (name)
-		free(name);
 }
 
-unsigned
-Container::sizeOnDisk()
+ContainerType
+Container::typeOf(const char *extension)
 {
-	return 0;
+    if (strcmp(extension, "CRT") == 0) return CRT_CONTAINER;
+    if (strcmp(extension, "T64") == 0) return T64_CONTAINER;
+    if (strcmp(extension, "D64") == 0) return D64_CONTAINER;
+    if (strcmp(extension, "PRG") == 0) return PRG_CONTAINER;
+    if (strcmp(extension, "P00") == 0) return P00_CONTAINER;
+    if (strcmp(extension, "G64") == 0) return G64_CONTAINER;
+    if (strcmp(extension, "TAP") == 0) return TAP_CONTAINER;
+    return (ContainerType)0;
 }
 
-const char *
-Container::getPath()
+void
+Container::setPath(const char *str)
 {
-	return path ? path : "";
+    if (path)
+        free(path);
+    
+    path = strdup(str);
 }
 
-const char *
-Container::getName()
+void
+Container::setName(const char *str)
 {
- 	return name ? name : "";
-}
-
-bool 
-Container::readFromBuffer(const void *buffer, unsigned length)
-{
-	return false;
+    strncpy(name, str, sizeof(name));
+    name[255] = 0;
 }
 
 bool 
@@ -101,15 +103,12 @@ Container::readFromFile(const char *filename)
 	if (!readFromBuffer(buffer, fileProperties.st_size)) {
 		goto exit;
 	}
-	
+
 	// Set path and default name
-	if (path)
-		free (path);
-	path = strdup(filename);
-	if (name)
-		free(name);
-	name = strdup(ChangeExtension(ExtractFilename(getPath()), "").c_str());
-	
+    setPath(filename);
+    setName(ChangeExtension(ExtractFilename(getPath()), "").c_str());
+    
+    fprintf(stderr, "Container %s (%s) read successfully from file %s\n", name, getName(), path);
 	success = true;
 
 exit:
@@ -122,10 +121,10 @@ exit:
 	return success;
 }
 
-bool 
-Container::writeToBuffer(void *buffer)
+unsigned
+Container::writeToBuffer(uint8_t *buffer)
 {
-	return false;
+	return 0;
 }
 
 bool 
@@ -134,8 +133,8 @@ Container::writeToFile(const char *filename)
 	bool success = false;
 	uint8_t *data = NULL;
 	FILE *file;
-	unsigned filesize = sizeOnDisk();
-
+	unsigned filesize = writeToBuffer(NULL);
+   
 	assert (filename != NULL);
 		
 	// Open file
@@ -144,7 +143,7 @@ Container::writeToFile(const char *filename)
 	}
 		
 	// Allocate memory
-		if (!(data = (uint8_t *)malloc(filesize))) {
+    if (!(data = (uint8_t *)malloc(filesize))) {
 		goto exit;
 	}
 	

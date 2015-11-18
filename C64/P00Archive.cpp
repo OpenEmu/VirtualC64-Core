@@ -46,25 +46,73 @@ P00Archive::isP00File(const char *filename)
 }
 
 P00Archive *
-P00Archive::archiveFromFile(const char *filename)
+P00Archive::archiveFromP00File(const char *filename)
 {
 	P00Archive *archive;
 
 	fprintf(stderr, "Loading P00 archive from P00 file...\n");
 	archive = new P00Archive();	
 	if (!archive->readFromFile(filename)) {
-		delete archive;
+        fprintf(stderr, "Failed to load archive\n");
+        delete archive;
 		archive = NULL;
 	}
-	
-	fprintf(stderr, "P00 archive loaded successfully.\n");
+
+    fprintf(stderr, "%s archive created with %d bytes (size of item 0 = %d).\n",
+            archive->getTypeAsString(), archive->size, archive->getSizeOfItem(0));
 	return archive;
 }
 
-const char *
-P00Archive::getTypeOfContainer() 
+P00Archive *
+P00Archive::archiveFromArchive(Archive *otherArchive)
 {
-	return "P00";
+    P00Archive *archive;
+    
+    if (otherArchive == NULL || otherArchive->getNumberOfItems() == 0)
+        return NULL;
+    
+    fprintf(stderr, "Creating P00 archive from %s archive...\n", otherArchive->getTypeAsString());
+    
+    if ((archive = new P00Archive()) == NULL) {
+        fprintf(stderr, "Failed to create archive\n");
+        return NULL;
+    }
+    
+    // Determine container size and allocate memory
+    archive->size = 8 + 17 + 1 + 2 + otherArchive->getSizeOfItem(0);
+    if ((archive->data = (uint8_t *)malloc(archive->size)) == NULL) {
+        fprintf(stderr, "Failed to allocate %d bytes of memory\n", archive->size);
+        delete archive;
+        return NULL;
+    }
+    
+    // Magic bytes (8 bytes)
+    uint8_t *ptr = archive->data;
+    strcpy((char *)ptr, "C64File");
+    ptr += 8;
+    
+    // Name in PET format (17 bytes)
+    strncpy((char *)ptr, (char *)otherArchive->getName(), 17);
+    for (unsigned i = 0; i < 17; i++, ptr++)
+        *ptr = ascii2pet(*ptr);
+    
+    // Record size (applies to REL files, only) (1 byte)
+    *ptr++ = 0;
+    
+    // Load address (2 bytes)
+    *ptr++ = LO_BYTE(otherArchive->getDestinationAddrOfItem(0));
+    *ptr++ = HI_BYTE(otherArchive->getDestinationAddrOfItem(0));
+    
+    // File data
+    int byte;
+    otherArchive->selectItem(0);
+    while ((byte = otherArchive->getByte()) != EOF) {
+        *ptr++ = (uint8_t)byte;
+    }
+
+    fprintf(stderr, "%s archive created with %d bytes (size of item 0 = %d).\n",
+            archive->getTypeAsString(), archive->size, archive->getSizeOfItem(0));
+    return archive;
 }
 
 void 
@@ -76,14 +124,26 @@ P00Archive::dealloc()
 	fp = -1;
 }
 
-bool 
+const char *
+P00Archive::getName()
+{
+    unsigned i;
+    
+    for (i = 0; i < 17; i++) {
+        name[i] = pet2ascii(data[0x08+i]);
+    }
+    name[i] = 0x00;
+    return name;
+}
+
+bool
 P00Archive::fileIsValid(const char *filename)
 {
 	return isP00File(filename);
 }
 
 bool 
-P00Archive::readFromBuffer(const void *buffer, unsigned length)
+P00Archive::readFromBuffer(const uint8_t *buffer, unsigned length)
 {
 	if ((data = (uint8_t *)malloc(length)) == NULL)
 		return false;
@@ -93,7 +153,18 @@ P00Archive::readFromBuffer(const void *buffer, unsigned length)
 	
 	return true;
 }
-		
+
+unsigned
+P00Archive::writeToBuffer(uint8_t *buffer)
+{
+    assert(data != NULL);
+    
+    if (buffer) {
+        memcpy(buffer, data, size);
+    }
+    return size;
+}
+
 int 
 P00Archive::getNumberOfItems()
 {
@@ -103,27 +174,18 @@ P00Archive::getNumberOfItems()
 const char *
 P00Archive::getNameOfItem(int n)
 {
-	int i;
+	unsigned i;
 	
 	if (n != 0)
 		return NULL;
 		
 	for (i = 0; i < 17; i++) {
-		name[i] = data[0x08+i];
+		name[i] = pet2ascii(data[0x08+i]);
 	}
 	name[i] = 0x00;
 	return name;
 }
 	
-int 
-P00Archive::getSizeOfItem(int n)
-{
-	if (size > 0)
-		return size-0x1A;
-	else
-		return 0;
-}		
-
 const char *
 P00Archive::getTypeOfItem(int n)
 {
@@ -133,9 +195,9 @@ P00Archive::getTypeOfItem(int n)
 uint16_t 
 P00Archive::getDestinationAddrOfItem(int n)
 {
-	uint16_t result = data[0x1A] + (data[0x1B] << 8);
-	printf("Will load to location %X\n", result);
-	return result;
+//	uint16_t result = data[0x1A] + (data[0x1B] << 8);
+//	return result;
+    return LO_HI(data[0x1A], data[0x1B]);
 }
 
 void 

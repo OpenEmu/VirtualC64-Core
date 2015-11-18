@@ -1,5 +1,5 @@
 /*
- * (C) 2007 Dirk W. Hoffmann. All rights reserved.
+ * Author: Dirk W. Hoffmann, www.dirkwhoffmann.de
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,53 +16,83 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+// For a detailed description of the various file formats, see
+// http://www.infinite-loop.at/Power20/Documentation/Power20-LiesMich/AE-Dateiformate.html
+
+
 #ifndef _ARCHIVE_INC
 #define _ARCHIVE_INC
 
 #include "Container.h"
 
-//! Loadable object with multiple files included
+/*! @class Archive
+    @brief Base class for all loadable objects with multiple files included. */
+
 class Archive : public Container {
-	
+    
 public:
 
-	//! Constructor
+    //
+    //! Creating and destructing containers
+    //
+    
+    //! Standard constructor.
 	Archive();
-	
-	//! Destructor
+    
+    //! Standard destructor.
 	virtual ~Archive();
-	
-	//! Search directory for filename and return item number
-	/*! Returns -1, if the file is not found.
-		The function supports the wildcard characters '?' and '*' */
+    
+    //
+    //! Accessing archive attributes
+    //
+
+    //! Returns the number of items in this archive.
+    virtual int getNumberOfItems() = 0;
+
+    //
+    //! Accessing item attributes
+    //
+
+    /*! Searches the directory for a specific item.
+        @param filename The item name may contain the wildcard characters '?' and '*'.
+        @return The number of the item (starting at 0) or -1, if no matching item was found. */
 	int getItemWithName(char *filename);
 			
-	//! Number of stored items
-	virtual int getNumberOfItems() = 0;
-	
-	//! Get name of n-th item
+    //! @brief Returns the name of an item (NULL, if the item does not exists)
 	virtual const char *getNameOfItem(int n) = 0;
 
-	//! Get file type of n-th item
+    //! @brief Returns the type of an item as a string (e.g., "PRG" or "DEL")
 	virtual const char *getTypeOfItem(int n) = 0;
 	
-	//! Get size of n-th item in bytes
-	virtual int getSizeOfItem(int n) = 0;
+    //! @brief Returns the size of an item in bytes
+	virtual int getSizeOfItem(int n);
 
-	//! Get size of n-th item in blocks
-	int getSizeOfItemInBlocks(int n) { return (getSizeOfItem(n) + 253) / 254; }
+    //! @brief Returns the size of an item in bits
+    virtual int getSizeOfItemInBits(int n) { return 8 * getSizeOfItem(n); }
+
+    //! @brief Returns the size of an item in blocks
+	virtual int getSizeOfItemInBlocks(int n) { return (getSizeOfItem(n) + 253) / 254; }
 		
-	//! Get destination memory location
-	/*! When flash() is invoked, the raw data is copied to this location in virtual memory. */
+    /*! @brief Returns the proposed memory location of an item.
+        @discussion When a file is flashed into memory, the raw data is copied to this location. */
 	virtual uint16_t getDestinationAddrOfItem(int n) = 0;
 	
-	//! Select item to read from
-	/*! You need to select an item before you read data */
+    //
+    //! @functiongroup Reading an item
+    //
+
+    //! @brief Selects an item to read from
 	virtual void selectItem(int n) = 0;
 	
-	//! Read next byte from selected item
-	/*! -1 indicates EOF (End of File) */
-	virtual int getByte() = 0;	
+    //! @brief Reads the next byte from the currently selected item
+	virtual int getByte() = 0;
+
+    //
+    //! @functiongroup Debugging
+    //
+    
+    virtual void dumpDirectory();
+    
 };
 
 #endif

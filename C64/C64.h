@@ -1,5 +1,4 @@
-/*
- * (C) 2006 - 2011 Dirk W. Hoffmann. All rights reserved.
+/* Written by Dirk W. Hoffmann, 2006 - 2015
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,15 +15,45 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// New in 0.9.6.1
+// VERSION 1.3.1:
+//
+//
+// Add subtext "xx Tracks", "Type 0 tape" to Media Dialog
+//
+// VERSION 1.4:
+//
+// Add
+// Cartridge dialog
+// VIC Sprite compatibility
+// Check if bus activity can be detected more precisely
+//
+// CLEANUP:
+// 
+// SPEEDUP:
+//
+// 1. Make CIA1 and CIA2 dynamic objects
+//    Inline execution functions as much as possible
+// 2. Add routine to quickly get the disk name from GCR data
+//    Right now, the hardware dialog takes some time to open
+//
+//
+// ENHANCEMENTS (BRAIN STORMING):
+//
+// 1. Upscaler (like superEagle)
+//    https://github.com/libretro/common-shaders/tree/master/eagle/shaders
+// 2. Datasette
 
-// SID stops playing in pause mode (bug was introduced in 0.9.6) (issue #116)
-// Screen geometry is now adjusted correctly when dragging an NTSC image into a PAL screen or vice versa (issue #113)
-// Memory panel now refreshes correctly (issue #111)
-// Floppy disks mow remain in drive after reset (issue +)
 
 #ifndef _C64_INC
 #define _C64_INC
+
+#define NDEBUG      // RELEASE
+#define DEBUG_LEVEL 2  // RELEASE
+
+// Snapshot version number of this release
+#define V_MAJOR 1
+#define V_MINOR 3
+#define V_SUBMINOR 0
 
 #include "basic.h"
 #include "VirtualComponent.h"
@@ -32,6 +61,8 @@
 #include "Snapshot.h"
 #include "T64Archive.h"
 #include "D64Archive.h"
+#include "G64Archive.h"
+#include "TAPArchive.h"
 #include "PRGArchive.h"
 #include "P00Archive.h"
 #include "FileArchive.h"
@@ -42,17 +73,19 @@
 #include "C64Memory.h"
 #include "VC1541Memory.h"
 #include "VIC.h"
+#include "PixelEngine.h"
 #include "SIDWrapper.h"
 #include "TOD.h"
 #include "CIA.h"
 #include "CPU.h"
 #include "VC1541.h"
+#include "Datasette.h"
 #include "Cartridge.h"
+#include "ExpansionPort.h"
+
 
 //! A complete virtual C64
 /*! The class puts all components together to a working virtual computer.
-
-    \verbatim
 	
 	------------------------    ------------------------
     |                      |    |                      |
@@ -100,11 +133,9 @@
  |              |                                                      |
  |	            |                                                      |
  |			    V                                                      V 
- |    ------------------------       copy to openGL texture      -----------------
+ |    ------------------------       copy to GPU texture         -----------------
  ---->| GUI                  |<----------------------------------| Screen buffer |
       ------------------------                                   -----------------
-	\endverbatim
-
 
 	The execution thread is the "engine" of the virtual computer. 
 	Like all virtual components, the virtual C64 can be in two states: "running" and "halted". 
@@ -115,7 +146,7 @@
 	The execution thread is organized as an infinite loop. In each iteration, control is passed to the
 	VIC, CIAs, CPU, VIAs, and the disk drive. The VIC chip draws the screen contents into a
 	simple byte array, the so called screen buffer. The asynchronously running GUI copies the screen buffer
-	contents onto an OpenGL texture which is then rendered by the graphic card.
+	contents onto a GPU texture which is then rendered by the graphic card.
 
     Class C64 is the most important class of the core emulator and MyController the most important GUI class. 
     C64Proxy implements a bridge between the GUI (written in Objective-C) anf the emulator (written in C++).
@@ -126,7 +157,7 @@
 	   c64 = new C64()
 	   
 	2. Configure
-	   c64->setPAL() etc.
+	   c64->set...() etc.
  
 	3. Load Roms
 	   c64->loadRom(...)
@@ -140,16 +171,7 @@
 #define KERNEL_ROM 4
 #define VC1541_ROM 8
 
-#define NUM_INPUT_DEVICES 4
-
 #define BACK_IN_TIME_BUFFER_SIZE 16
-
-enum INPUT_DEVICES {
-	IPD_UNCONNECTED = 0,
-	IPD_KEYBOARD,
-	IPD_JOYSTICK_1,
-	IPD_JOYSTICK_2
-};
 
 
 class C64 : public VirtualComponent {
@@ -180,55 +202,57 @@ public:
 	//! Reference to the connected virtual keyboard.
 	Keyboard *keyboard;
 	
-	//! Reference to the connected joysticks
-	Joystick *joystick1, *joystick2;
-	
+	//! Reference to joystick in port 1
+	Joystick *joystick1;
+
+    //! Reference to joystick in port 2
+    Joystick *joystick2;
+
 	//! Reference to the virtual IEC bus
 	IEC *iec;
-	
+
+    //! Reference to the virtual expansion port (cartdrige slot)
+    ExpansionPort *expansionport;
+
 	//! Reference to the virtual VC1541
 	VC1541 *floppy;
-		
 
-		
+    //! Virtual tape drive (Datasette)
+    Datasette datasette;
+
+    
 private:
 
 	//! The execution thread
 	pthread_t p;
-
-    //! Additional frame delay
-    /*! = 0 : Emulator runs at original speed (varies between PAL and NTSC) (default value) 
-     > 0 : Emulator runs slower than origonal machine 
-     < 0 : Emulator runs faster than original machine 
-     */
-    int frameDelayOffset;
-
-	//! Indicates if c64 is currently running at maximum speed (with timing synchronization disabled)
-	bool warp;
     
-    //! Indicates that we should always run as possible
-	bool alwaysWarp;
+    //! System timer information (needed for running the execution thread at the desired speed)
+    mach_timebase_info_data_t timebase;
     
-    //! Indicates that we should run as fast as possible at least during disk operations
-	bool warpLoad;
+    //! Converts kernel time to nanoseconds
+    uint64_t abs_to_nanos(uint64_t abs) { return abs * timebase.numer / timebase.denom; }
 
-	//! Game port configuration.
-	/*! The value is determined by the enumeration type INPUT_DEVICES */
-	int port[2];
-    
+    //! Converts nanoseconds to kernel time
+    uint64_t nanos_to_abs(uint64_t nanos) { return nanos * timebase.denom / timebase.numer; }
+   
 	//! Snapshot history ring buffer (for cheatbox)
 	Snapshot *backInTimeHistory[BACK_IN_TIME_BUFFER_SIZE]; 
     
 	//! ring buffer write pointer
 	unsigned backInTimeWritePtr;
     
-    
-    //
-    //  State variables (will be saves to snapshot)
-    //
+    // -----------------------------------------------------------------------------------------------
+    //                                          Properties
+    // -----------------------------------------------------------------------------------------------
 
-    //! PAL or NTSC machine?
-    bool pal;
+    //! Indicates if c64 is currently running at maximum speed (with timing synchronization disabled)
+    bool warp;
+    
+    //! Indicates that we should always run as possible
+    bool alwaysWarp;
+    
+    //! Indicates that we should run as fast as possible at least during disk operations
+    bool warpLoad;
 
 	//! Current clock cycle since power up
 	uint64_t cycles;
@@ -236,18 +260,20 @@ private:
     //! Current clock cycle relative to the current rasterline
     /*! Range: 1 ... 63 on PAL machines
                1 ... 65 on NTSC machines */
-	int rasterlineCycle;
+    int rasterlineCycle;
     
 	//! Current frame number since power up
 	uint64_t frame;
 	
 	//! Current rasterline number
-	int rasterline;
+	uint16_t rasterline;
 	
-	//! Target time
-	/*! Used to synchronize emulation speed */
-	uint64_t targetTime; 
-		
+private:
+    
+	//! Target time in nanoseconds
+	/*! Used to synchronize emulation speed. */
+	uint64_t nanoTargetTime;
+
     
 	// -----------------------------------------------------------------------------------------------
 	//                                             Methods
@@ -260,14 +286,13 @@ public:
 	
 	//! Destructor
 	~C64();
-	
-	//! Reset the virtual C64 and all of its virtual sub-components to its initial state.
+
+	//! Reset the virtual C64 and all of its sub components. 
 	/*! A reset is performed by simulating a hard reset on a real C64. */
-	void reset();           
-	
-	//! Reset the virtual C64 and all of its virtual sub-components to its initial state.
-	/*! A (faked) reset is performed by loading a presaved image from disk. */
-	void fastReset();           
+    void reset();
+    
+    //! Dump current configuration into message queue
+    void ping();
 
 	//! Dump current state into logfile
 	void dumpState();
@@ -280,47 +305,22 @@ public:
 public:
 	
 	//! Returns true for PAL machines
-	inline bool isPAL() { return pal; }
+	inline bool isPAL() { return vic->isPAL(); }
 
 	//! Set PAL mode
+    //  DEPRECATED. PAL/NTSC IS DETERMINED BY VIC CHIP MODEL
 	void setPAL();
 	
 	//! Returns true for NTSC machines
-	inline bool isNTSC() { return !pal; }
+    //  DEPRECATED. PAL/NTSC IS DETERMINED BY VIC CHIP MODEL
+	inline bool isNTSC() { return !vic->isPAL(); }
 
 	//! Set NTSC mode
 	void setNTSC();
-	
-    //! Returns the user definable speed adjustment (msec per frame)
-	inline int getFrameDelayOffset() { return frameDelayOffset; } 
-    
-	//! Sets the user definable speed adjustment (msec per frame)
-	inline void setFrameDelayOffset(int delay) { frameDelayOffset = delay; }
-    
-	//! Enable or disable timing synchronization
-	void setWarp(bool b);
-	
-	//! Returns true iff cpu should always run at maximun speed
-	inline bool getAlwaysWarp() { return alwaysWarp; }
-	
-	//! Setter for alwaysWarp
-	void setAlwaysWarp(bool b);
-	
-	//! Returns true iff warp mode is activated during disk operations
-	inline bool getWarpLoad() { return warpLoad; }
-
-	//! Setter for warpLoad
-	void setWarpLoad(bool b);
-
-    //! Get color scheme
-    VIC::ColorScheme getColorScheme() { return vic->getColorScheme(); }
-    
-	//! Set color scheme
-	void setColorScheme(VIC::ColorScheme scheme) { vic->setColorScheme(scheme); }
 
     //! Returns true iff audio filters are enabled.
     bool getAudioFilter() { return sid->getAudioFilter(); }
-    
+
 	//! Enable or disable filters of SID.
 	void setAudioFilter(bool value) { sid->setAudioFilter(value); }
       
@@ -352,15 +352,9 @@ public:
 	//! Load state from snapshot container
 	void loadFromSnapshot(Snapshot *snapshot);
 
-	//! Load state from memory buffer
-	void loadFromBuffer(uint8_t **buffer);
-	
-	//! Save state to snapshot container
-	void saveToSnapshot(Snapshot *snapshot);
-	
-	//! Save state to memory buffer
-	void saveToBuffer(uint8_t **buffer);
-	
+    //! Save state to snapshot container
+    void saveToSnapshot(Snapshot *snapshot);
+
 	
 	// -----------------------------------------------------------------------------------------------
 	//                                           Control
@@ -441,27 +435,50 @@ public:
 	//                                           Timing
 	// -----------------------------------------------------------------------------------------------
 	
+public:
+    
+    //! Returns true iff cpu runs at maximum speed (timing sychronization is disabled)
+    inline bool getWarp() { return warp; }
+    
+    //! Enable or disable timing synchronization
+    void setWarp(bool b);
+    
+    //! Returns true iff cpu should always run at maximun speed
+    inline bool getAlwaysWarp() { return alwaysWarp; }
+    
+    //! Setter for alwaysWarp
+    void setAlwaysWarp(bool b);
+    
+    //! Returns true iff warp mode is activated during disk operations
+    inline bool getWarpLoad() { return warpLoad; }
+    
+    //! Setter for warpLoad
+    void setWarpLoad(bool b);
+    
 	//! Initialize timer (sets variable target_time)
 	void restartTimer();
 	
 	//! Wait until target_time has been reached and then updates target_time.
 	void synchronizeTiming();
 	
-    //! Returns true iff cpu runs at maximum speed (timing sychronization is disabled)
-	bool getWarp() { return warp; }
-	
     
 	// ---------------------------------------------------------------------------------------------
 	//                                 Archives (disks, tapes, etc.)
 	// ---------------------------------------------------------------------------------------------
 	
+public:
+    
 	//! Flush specified item from archive into memory and delete archive
 	/*! All archive types are flushable */
 	bool flushArchive(Archive *a, int item);
 	
-	//! Mount specified archive in the virtual disk drive.
-	/*! Only D64 archives are mountable */
-	bool mountArchive(D64Archive *a);
+	//! @brief      Inserts an archive as a virtual floppy disk
+    /*! @discussion Only D64 and G64 archives are supported */
+	bool mountArchive(Archive *a);
+
+    //! @brief      Inserts a TAP archive as a virtual datasette tape
+    /*! @discussion Only TAP archives can be used as tape */
+    bool insertTape(TAPArchive *a);
 
 	
 	// ---------------------------------------------------------------------------------------------
@@ -472,7 +489,7 @@ public:
 	bool attachCartridge(Cartridge *c);
 	
 	// Detach cartridge
-	bool detachCartridge();
+	void detachCartridge();
 
 	//! Returns true iff a cartridge is attached
 	bool isCartridgeAttached();
@@ -489,53 +506,12 @@ public:
 	inline uint64_t getFrame() { return frame; }
 
 	//! Returns the number of the currently drawn rasterline
-	inline uint64_t getRasterline() { return rasterline; }
-
-	// Returns the number of frames per second
-	/*! Number varies between PAL and NTSC machines */	
-    inline int getFramesPerSecond() { if (pal) return VIC::PAL_REFRESH_RATE; else return VIC::NTSC_REFRESH_RATE; }
-	
-	//! Returns the number of rasterlines per frame
-	/*! Number varies between PAL and NTSC machines */	
-    inline int getRasterlinesPerFrame() { if (pal) return VIC::PAL_RASTERLINES; else return VIC::NTSC_RASTERLINES; }
-	
-	//! Returns the number of CPU cycles performed per rasterline
-	/*! Number varies between PAL and NTSC machines */	
-	inline int getCyclesPerRasterline() { if (pal) return VIC::PAL_CYCLES_PER_RASTERLINE; else return VIC::NTSC_CYCLES_PER_RASTERLINE; }
-	
-	//! Returns the number of CPU cycles performed per frame
-	/*! Number varies between PAL and NTSC machines */	
-	inline int getCyclesPerFrame() { if (pal) return VIC::PAL_RASTERLINES * VIC::PAL_CYCLES_PER_RASTERLINE; else return VIC::NTSC_RASTERLINES * VIC::NTSC_CYCLES_PER_RASTERLINE; }
-        
-	//! Returns the time interval between two frames
-	inline int getFrameDelay() { if (pal) return 1000000 / VIC::PAL_REFRESH_RATE; else return 1000000 / VIC::NTSC_REFRESH_RATE; }
-
+	inline uint16_t getRasterline() { return rasterline; }
+    
     
 	// ---------------------------------------------------------------------------------------------
 	//                                             Misc
 	// ---------------------------------------------------------------------------------------------
-	
-	//! Returns the build number
-	/*! The build number is composed out of the build date */
-	int build();
-	
-	//! Bind input device with game port
-	void setInputDevice(int portNo, int newDevice);
-
-	//! Switch the input device to the next available
-	void switchInputDevice(int port);
-
-	//! Switch input devices between both ports
-	void switchInputDevices();
-	
-	//! Get the device mapped to the port portNo
-	int getDeviceOfPort(int portNo);
-	
-	//! Sets a new joystick
-	Joystick *addJoystick();
-	
-	//! Removes a joystick
-	void removeJoystick(Joystick *joystick);
 	
 	//! The tread exit function.
 	/*! Automatically invoked by the execution thread on termination */

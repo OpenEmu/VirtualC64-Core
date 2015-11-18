@@ -29,18 +29,25 @@ class SIDWrapper : public VirtualComponent {
 public:	
 	//! Start address of the SID I/O space.
 	static const uint16_t SID_START_ADDR = 0xD400;
+    
 	//! End address of the SID I/O space.
 	static const uint16_t SID_END_ADDR = 0xD7FF;
 
 private:
+
     //! Old SID implementation
     OldSID *oldsid;
 
+public:
     //! Implementation based on the ReSID library
     ReSID *resid;
-    
+   
+private:
     //! SID selector
     bool useReSID;
+    
+    //! Remembers latest written value
+    uint8_t latchedDataBus;
     
 public:
     //! Returns true if the \a addr is located in the I/O range of the SID chip.
@@ -52,19 +59,11 @@ public:
 	
 	//! Destructor.
 	~SIDWrapper();
-	
-	//! Bring SID back to it's initial state.
-	void reset();
-	
-	//! Load state
-	void loadFromBuffer(uint8_t **buffer);
-	
-	//! Save state
-	void saveToBuffer(uint8_t **buffer);	
-	
+			
 	//! Dump internal state to console
 	void dumpState();
 	
+    
     // -----------------------------------------------------------------------------------------------
 	//                                         Configuring
 	// -----------------------------------------------------------------------------------------------
@@ -75,30 +74,31 @@ public:
     //! Configure the SID chip for being used in NTSC machines
     void setNTSC();
     
-    //! Returns true iff audio filters are enabled.
-	inline bool getAudioFilter() { return resid->getAudioFilter(); }
-    
-	//! Enable or disable filters of SID.
-	void setAudioFilter(bool enable);
-
     //! Returns true, iff ReSID libray shall be used.
     inline bool getReSID() { return useReSID; }
     
     //! Enable or disable ReSID library.
-	void setReSID(bool enable);
+    void setReSID(bool enable);
+    
+    //! Get chip model
+    inline chip_model getChipModel() { return resid->getChipModel(); }
+    
+    //! Set chip model (ReSID only)
+    void setChipModel(chip_model value);
+    
+    //! Returns true iff audio filters are enabled.
+    // inline bool getAudioFilter() { return resid->getAudioFilter(); }
+    inline bool getAudioFilter() { return resid->getExternalAudioFilter(); }
+    
+    //! Enable or disable filters of SID.
+    void setAudioFilter(bool enable);
     
     //! Get sampling method
     inline sampling_method getSamplingMethod() { return resid->getSamplingMethod(); }
     
     //! Set sampling method (ReSID only)
     void setSamplingMethod(sampling_method value);
-    
-    //! Get chip model 
-    inline chip_model getChipModel() { return resid->getChipModel(); }
-    
-    //! Set chip model (ReSID only)
-    void setChipModel(chip_model value);
-    
+
     //! Return samplerate.
 	inline uint32_t getSampleRate() { return resid->getSampleRate(); }
     
@@ -106,22 +106,57 @@ public:
 	void setSampleRate(uint32_t sr);
     
     //! Get clock frequency
-	inline uint32_t getClockFrequency() { return resid->getClockFrequency(); }	
+    inline uint32_t getClockFrequency();
     
 	//! Set clock frequency
 	void setClockFrequency(uint32_t frequency);	
+
+    /*! @brief Sets the current volume
+     */
+    void setVolume(int32_t v) { resid->setVolume(v); }
+
+    /*! @brief Sets the target volume
+     */
+    void setTargetVolume(int32_t volume) { resid->setTargetVolume(volume); }
+    
+    /*! @brief   Triggers volume ramp up phase
+     *  @details Configures volume and targetVolume to simulate a smooth audio fade in
+     */
+    void rampUp() { resid->rampUp(); }
+    void rampUpFromZero() { resid->rampUpFromZero(); }
+
+    /*! @brief   Triggers volume ramp down phase
+     *  @details Configures volume and targetVolume to simulate a quick audio fade out
+     */
+    void rampDown() { resid->rampDown(); }
+
+    /*! @brief Clears ringbuffer
+     */
+    void clearRingbuffer() { resid->clearRingbuffer(); }
 
 
     // -----------------------------------------------------------------------------------------------
 	//                                           Execution
 	// -----------------------------------------------------------------------------------------------
 
-    //! Pass control to the SID chip.
-	/*! The SID will be executed and generate audio samples for about one video frame.
-     Actual number of generated samples depends on executed CPU cycles since last call.
-     \param cycles Number of cycles to execute (ignored).
+private:
+    
+    //! Current clock cycle since power up
+    uint64_t cycles;
+
+public:
+    
+    /*!
+     @abstract   Executes SID until a certain cycle is reached
+     @param      cycle The target cycle
      */
-	bool execute(int cycles);
+    void executeUntil(uint64_t targetCycle);
+
+    /*!
+     @abstract   Executes SID for a certain number of cycles
+     @param      cycles Number of cycles to execute
+     */
+	void execute(uint64_t numCycles);
 
     //! Notifies the SID chip that the emulator has started
     void run();

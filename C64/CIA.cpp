@@ -21,9 +21,39 @@
 CIA::CIA()
 {
 	name = "CIA";
+    
+    // Register sub components
+    VirtualComponent *subcomponents[] = { &tod, NULL };
+    registerSubComponents(subcomponents, sizeof(subcomponents));
 
-	cpu = NULL;
-    vic = NULL;
+    // Register snapshot items
+    SnapshotItem items[] = {
+        
+        { &delay,           sizeof(delay),          CLEAR_ON_RESET },
+        { &feed,            sizeof(feed),           CLEAR_ON_RESET },
+        { &CRA,             sizeof(CRA),            CLEAR_ON_RESET },
+        { &CRB,             sizeof(CRB),            CLEAR_ON_RESET },
+        { &ICR,             sizeof(ICR),            CLEAR_ON_RESET },
+        { &IMR,             sizeof(IMR),            CLEAR_ON_RESET },
+        { &PB67TimerMode,   sizeof(PB67TimerMode),  CLEAR_ON_RESET },
+        { &PB67TimerOut,    sizeof(PB67TimerOut),   CLEAR_ON_RESET },
+        { &PB67Toggle,      sizeof(PB67Toggle),     CLEAR_ON_RESET },
+        { &PALatch,         sizeof(PALatch),        CLEAR_ON_RESET },
+        { &PBLatch,         sizeof(PBLatch),        CLEAR_ON_RESET },
+        { &DDRA,            sizeof(DDRA),           CLEAR_ON_RESET },
+        { &DDRB,            sizeof(DDRB),           CLEAR_ON_RESET },
+        { &PA,              sizeof(PA),             CLEAR_ON_RESET },
+        { &PB,              sizeof(PB),             CLEAR_ON_RESET },
+        { &CNT,             sizeof(CNT),            CLEAR_ON_RESET },
+        { &INT,             sizeof(INT),            CLEAR_ON_RESET },
+        { &readICR,         sizeof(readICR),        CLEAR_ON_RESET },
+        { &counterA,        sizeof(counterA),       CLEAR_ON_RESET },
+        { &latchA,          sizeof(latchA),         CLEAR_ON_RESET },
+        { &counterB,        sizeof(counterB),       CLEAR_ON_RESET },
+        { &latchB,          sizeof(latchB),         CLEAR_ON_RESET },
+        { NULL,             0,                      0 }};
+
+    registerSnapshotItems(items, sizeof(items));
 }
 
 CIA::~CIA()
@@ -31,109 +61,57 @@ CIA::~CIA()
 }
 
 void
-CIA::reset() 
-{	
-	clearInterruptLine();
+CIA::reset()
+{
+    VirtualComponent::reset();
+    
+    // Establish bindings
+    cpu = c64->cpu;
+    vic = c64->vic;
+    
+    clearInterruptLine();
 
-	// reset control
-	delay = 0;
-	feed = 0;
-	CRA = 0;
-	CRB = 0;
-	ICR = 0;
-	IMR = 0;
-	PB67TimerMode = 0;
-	PB67TimerOut = 0;
-	PB67Toggle = 0;
-
-	// reset ports
-	PALatch = 0;
-	PBLatch = 0;
-	DDRA = 0;
-	DDRB = 0;
 	PA = 0xff; 
 	PB = 0xff; 
 	CNT = true; // CNT line is high by default
 	INT = 1;
-	readICR = false;
 	
-	counterA = 0x0000;
 	latchA = 0xFFFF;
-	counterB = 0x0000;
 	latchB = 0xFFFF;
-	
-	tod.reset();
 }
 
-void 
-CIA::loadFromBuffer(uint8_t **buffer)
-{	
-	debug(2, "  Loading CIA state...\n");
-	
-	delay = read32(buffer);
-	feed = read32(buffer);
-	CRA = read8(buffer);
-	CRB = read8(buffer);
-	ICR = read8(buffer);
-	IMR = read8(buffer);
-	PB67TimerMode = read8(buffer);
-	PB67TimerOut = read8(buffer);
-	PB67Toggle = read8(buffer);
-	
-	PALatch = read8(buffer);
-	PBLatch = read8(buffer);
-	DDRA = read8(buffer);
-	DDRB = read8(buffer);
-	
-	PA = read8(buffer);
-	PB = read8(buffer);
-	
-	CNT = (bool)read8(buffer);
-	INT = (bool)read8(buffer);
-		
-	counterA = read16(buffer);
-	latchA = read16(buffer);
-	counterB = read16(buffer);
-	latchB = read16(buffer);
-
-	tod.loadFromBuffer(buffer);
-}
-
-void 
-CIA::saveToBuffer(uint8_t **buffer)
+#if 0
+void
+CIA::setFlagPin(uint8_t value)
 {
-	debug(2, "  Saving CIA state...\n");
-	
-	write32(buffer, delay);
-	write32(buffer, feed);
-	write8(buffer, CRA);
-	write8(buffer, CRB);
-	write8(buffer, ICR);
-	write8(buffer, IMR);
-	write8(buffer, PB67TimerMode);
-	write8(buffer, PB67TimerOut);
-	write8(buffer, PB67Toggle);
-	
-	write8(buffer, PALatch);
-	write8(buffer, PBLatch);
-	write8(buffer, DDRA);
-	write8(buffer, DDRB);
-	
-	write8(buffer, PA);
-	write8(buffer, PB);
-	
-	write8(buffer, (uint8_t)CNT);
-	write8(buffer, (uint8_t)INT);
-	
-	write16(buffer, counterA);
-	write16(buffer, latchA);
-	write16(buffer, counterB);
-	write16(buffer, latchB);
+    if (value) // Note: FLAG pin is inverted
+        ICR &= ~0x10;
+    else
+        ICR |= 0x10;
+}
+#endif
 
-	tod.saveToBuffer(buffer);
+void
+CIA::triggerRisingEdgeOnFlagPin()
+{
+    // ICR &= ~0x10; // Note: FLAG pin is inverted
 }
 
-uint8_t CIA::peek(uint16_t addr)
+void
+CIA::triggerFallingEdgeOnFlagPin()
+{
+    ICR |= 0x10; // Note: FLAG pin is inverted
+        
+    // Trigger interrupt, if enabled
+    if (IMR & 0x10) {
+        INT = 0;
+        ICR |= 0x80;
+        raiseInterruptLine();
+    }
+}
+
+uint8_t
+CIA::peek(uint16_t addr)
 {
 	uint8_t result;
 	
@@ -169,33 +147,28 @@ uint8_t CIA::peek(uint16_t addr)
 			
 		case CIA_TIME_OF_DAY_SEC_FRAC:
 			
-			// debug("peek CIA_TIME_OF_DAY_SEC_FRAC\n");
 			result = tod.getTodTenth();
 			tod.defreeze();
 			break;
 		
 		case CIA_TIME_OF_DAY_SECONDS:
 			
-			// debug("peek CIA_TIME_OF_DAY_SECONDS\n");
 			result = tod.getTodSeconds();
 			break;
 			
 		case CIA_TIME_OF_DAY_MINUTES:
 			
-			// debug("peek CIA_TIME_OF_DAY_MINUTES\n");
 			result = tod.getTodMinutes();
 			break;
 			
 		case CIA_TIME_OF_DAY_HOURS:
 
-			// debug("peek CIA_TIME_OF_DAY_HOURS\n");
 			tod.freeze();
 			result = tod.getTodHours();
 			break;
 			
 		case CIA_SERIAL_IO_BUFFER:
 			
-			// debug("peek CIA_SERIAL_IO_BUFFER\n");			
 			result = 0x00;
 			break;
 			
@@ -532,6 +505,8 @@ void CIA::dumpTrace()
 
 void CIA::dumpState()
 {
+    // assert(0);
+
 	msg("              Counter A : %02X\n", getCounterA());
 	msg("                Latch A : %02X\n", getLatchA());
 	msg("            Data port A : %02X\n", getDataPortA());
@@ -553,15 +528,7 @@ void CIA::dumpState()
 }
 
 void CIA::executeOneCycle()
-{
-#if 0
-	// if (cpu->c64->event2 && this == cpu->c64->cia2)
-	if (this == cpu->c64->cia1)
-	{
-		dumpTrace();	
-	}
-#endif
-	
+{	
 	//
 	// Layout of timer (A and B)
 	//
@@ -638,6 +605,7 @@ void CIA::executeOneCycle()
 	// Decrement counter
 	if (delay & CountB3) {
 		counterB--; // (1)
+        // debug("Counter B down to %04X \n", counterB);
 	}
 
 	// Check underflow condition
@@ -789,7 +757,7 @@ void CIA::executeOneCycle()
 	readICR = false;
 
 	// move delay flags left and feed in new bits
-	delay = (delay << 1) & DelayMask | feed;
+	delay = ((delay << 1) & DelayMask) | feed;
 }
 
 
@@ -799,23 +767,24 @@ void CIA::executeOneCycle()
 
 CIA1::CIA1()
 {
+    name = "CIA1";
 	debug(2, "  Creating CIA1 at address %p...\n", this);
-
-	name = "CIA1";
-	keyboard = NULL;
-	joystick[0] = 0xff;
-	joystick[1] = 0xff;	
 }
 
 CIA1::~CIA1()
 {
+    this->c64 = c64;
 	debug(2, "  Releasing CIA1\n");
 }
 
 void 
 CIA1::reset()
 {
-	debug(2, "  Resetting CIA1...\n");
+    keyboard = c64->keyboard;
+    joy[0] = c64->joystick1;
+    joy[1] = c64->joystick2;
+    joystick[0] = 0xff;
+    joystick[1] = 0xff;
 	CIA::reset();
 }
 
@@ -825,16 +794,6 @@ CIA1::dumpState()
 	msg("CIA 1:\n");
 	msg("------\n\n");
 	CIA::dumpState();
-}
-
-void 
-CIA1::setJoystickToPort( int portNo, Joystick *j ) {
-	joy[portNo] = j;
-}
-
-void 
-CIA1::setKeyboardToPort( int portNo, bool b ) {
-	bKeyboard[portNo] = b;
 }
 
 void 
@@ -856,18 +815,22 @@ CIA1::getInterruptLine()
 }
 
 void 
-CIA1::pollJoystick( Joystick *joy, int joyDevNo ) {
-	JoystickAxisState leftRightState	= joy->GetAxisX(); 
-	JoystickAxisState upDownState		= joy->GetAxisY();
-	bool buttonState					= joy->GetButtonPressed();
+CIA1::pollJoystick(Joystick *joy, int joyDevNo)
+{
+    JoystickAxisState leftRightState = joy->GetAxisX();
+	JoystickAxisState upDownState = joy->GetAxisY();
+	bool buttonState = joy->GetButtonPressed();
 	
+    assert (joy != NULL);
+    
 	// up/down
 	// set the down bit: 2, 2 and clear up bit: 2, 1		
-	// ATTENTION: clearJoystickBits( x, y ) means pressed and setJoystickBits( x, y ) means released
-	if( upDownState == JOYSTICK_AXIS_Y_UP ) {
+	// Remember: clearJoystickBits(x, y) means pressed
+    //           setJoystickBits( x, y ) means released
+	if(upDownState == JOYSTICK_AXIS_Y_UP) {
 		clearJoystickBits(joyDevNo, 1);
 		setJoystickBits(joyDevNo, 2);
-	} else if( upDownState == JOYSTICK_AXIS_Y_DOWN ) {
+	} else if(upDownState == JOYSTICK_AXIS_Y_DOWN) {
 		clearJoystickBits(joyDevNo, 2);
 		setJoystickBits(joyDevNo, 1);
 	} else {
@@ -876,10 +839,10 @@ CIA1::pollJoystick( Joystick *joy, int joyDevNo ) {
 	}
 	
 	// left/right
-	if( leftRightState == JOYSTICK_AXIS_X_LEFT ) {
+	if(leftRightState == JOYSTICK_AXIS_X_LEFT) {
 		clearJoystickBits(joyDevNo, 4);
 		setJoystickBits(joyDevNo, 8);
-	} else if( leftRightState == JOYSTICK_AXIS_X_RIGHT ) {
+	} else if(leftRightState == JOYSTICK_AXIS_X_RIGHT) {
 		clearJoystickBits(joyDevNo, 8);			
 		setJoystickBits(joyDevNo, 4);
 	} else {
@@ -888,7 +851,7 @@ CIA1::pollJoystick( Joystick *joy, int joyDevNo ) {
 	}
 	
 	// fire
-	if( buttonState ) {
+	if(buttonState) {
 		clearJoystickBits(joyDevNo, 16);
 	} else {
 		setJoystickBits(joyDevNo, 16);
@@ -904,18 +867,17 @@ CIA1::peek(uint16_t addr)
 	
 	switch(addr) {		
 		case CIA_DATA_PORT_A:
-						
-			if ( joy[0] != NULL )
-				pollJoystick( joy[0], 1 );
-			
-			// We change only those bits that are configured as outputs, all input bits are 1
+				
+			pollJoystick(joy[1], 2);
+
+            // We change only those bits that are configured as outputs, all input bits are 1
 			result = PA; // iomem[addr] | ~iomem[CIA_DATA_DIRECTION_A];
 			
 			// The external port lines can pull down any bit, even if it configured as output
 			// result &= portLinesA; 
 			
 			// Check joystick movement
-			result &= joystick[0];
+			result &= joystick[1];
 			break;
 			
 		case CIA_DATA_PORT_B:
@@ -923,13 +885,12 @@ CIA1::peek(uint16_t addr)
 			uint8_t bitmask = CIA1::peek(CIA_DATA_PORT_A);
 			uint8_t keyboardBits = keyboard->getRowValues(bitmask); 
 			
-			if ( joy[1] != NULL )
-				pollJoystick( joy[1], 2 );
+            pollJoystick(joy[0], 1);
 			
 			result = PB;
 			
 			// Check joystick movement
-			result &= joystick[1];
+            result &= joystick[0];
 			
 			// Check for pressed keys
 			result &= keyboardBits;
@@ -948,6 +909,8 @@ CIA1::peek(uint16_t addr)
 void 
 CIA1::poke(uint16_t addr, uint8_t value)
 {
+    uint8_t PBold;
+    
 	assert(addr <= CIA1_END_ADDR - CIA1_START_ADDR);
 	
 	// log("Poking %02X to %04X\n", value, 0xDC00 + addr);
@@ -969,17 +932,28 @@ CIA1::poke(uint16_t addr, uint8_t value)
 			
 		case CIA_DATA_PORT_B:
 			
+            PBold = PB;
+            
 			PBLatch = value;
 			PB = ((PBLatch | ~DDRB) & ~PB67TimerMode) | (PB67TimerOut & PB67TimerMode);
-			// oldPB = PB;
+            
+            if ((PBold & 0x10) != (PB & 0x10)) { // edge on lightpen bit?
+                vic->triggerLightPenInterrupt();
+            }
 			return;
 			
 		case CIA_DATA_DIRECTION_B:
 
+            PBold = PB;
+
 			DDRB = value;
 			PB = ((PBLatch | ~DDRB) & ~PB67TimerMode) | (PB67TimerOut & PB67TimerMode);
-			// oldPB = PB;
-			return;
+
+            if ((PBold & 0x10) != (PB & 0x10)) { // edge on lightpen bit?
+                vic->triggerLightPenInterrupt();
+            }
+            
+            return;
 		
 		default:
 			CIA::poke(addr, value);
@@ -1013,10 +987,8 @@ CIA1::clearJoystickBits(int nr, uint8_t mask)
 
 CIA2::CIA2()
 {
+    name = "CIA2";
 	debug(2, "  Creating CIA2 at address %p...\n", this);
-
-	name = "CIA2";
-	iec = NULL;
 }
 
 CIA2::~CIA2()
@@ -1026,7 +998,8 @@ CIA2::~CIA2()
 
 void CIA2::reset()
 {
-	debug(2, "  Resetting CIA2...\n");
+    this->c64 = c64;
+    iec = c64->iec;
 	CIA::reset();
 }
 

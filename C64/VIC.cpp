@@ -1,5 +1,5 @@
 /*
- * (C) 2006 Dirk W. Hoffmann. All rights reserved.
+ * Author: Dirk W. Hoffmann
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,44 +17,75 @@
  */
 
 /* Cycle accurate VIC II emulation.
-   Mostly based on the extensive VIC II documentation by Christian Bauer. Thanks, Christian! */
+   Mostly based on the extensive VIC II documentation by Christian Bauer ([C.B.])
+   Many thanks, Christian! 
+*/
 
 #include "C64.h"
-
-
-// Update value of the display variable according to the dma line condition 
-#define update_display if (dmaLine) { displayState = true; }
-
-// Update value of the display variable and the BA line according to the dma line condition 
-#define update_display_and_ba if (dmaLine) { displayState = true; pullDownBA(0x100); }
 
 
 VIC::VIC()
 {
 	name = "VIC";
-
 	debug(2, "  Creating VIC at address %p...\n", this);
-
-	c64 = NULL;
-	cpu = NULL;
-	mem = NULL;
-	
-	// Delete screen buffers
-	for (unsigned i = 0; i < sizeof(screenBuffer1) / sizeof(int); i++) {
-		screenBuffer1[i] = colors[BLUE];
-	}
-	for (unsigned i = 0; i < sizeof(screenBuffer2) / sizeof(int); i++) {
-		screenBuffer2[i] = colors[BLUE];
-	}
-	currentScreenBuffer = screenBuffer1;
-	pixelBuffer = currentScreenBuffer;
-	
-	// Initialize colors
-	setColorScheme(CCS64);
-
+    
 	// Start with all debug options disabled
 	markIRQLines = false;
 	markDMALines = false;
+    
+    // Register sub components
+    VirtualComponent *subcomponents[] = { &pixelEngine, NULL };
+    registerSubComponents(subcomponents, sizeof(subcomponents));
+
+    // Register snapshot items
+    SnapshotItem items[] = {
+
+        // Configuration items
+        { &chipModel,                   sizeof(chipModel),                      KEEP_ON_RESET },
+        
+        // Internal state
+        { &vblank,                      sizeof(vblank),                         CLEAR_ON_RESET },
+        { &xCounter,                    sizeof(xCounter),                       CLEAR_ON_RESET },
+        { &yCounter,                    sizeof(yCounter),                       CLEAR_ON_RESET },
+        { &yCounterEqualsIrqRasterline, sizeof(yCounterEqualsIrqRasterline),    CLEAR_ON_RESET },
+        { &registerVC,                  sizeof(registerVC),                     CLEAR_ON_RESET },
+        { &registerVCBASE,              sizeof(registerVCBASE),                 CLEAR_ON_RESET },
+        { &registerRC,                  sizeof(registerRC),                     CLEAR_ON_RESET },
+        { &registerVMLI,                sizeof(registerVMLI),                   CLEAR_ON_RESET },
+        { &oldControlReg1,              sizeof(oldControlReg1),                 CLEAR_ON_RESET },
+        { &refreshCounter,              sizeof(refreshCounter),                 CLEAR_ON_RESET },
+        { &addrBus,                     sizeof(addrBus),                        CLEAR_ON_RESET },
+        { &dataBus,                     sizeof(dataBus),                        CLEAR_ON_RESET },
+        { &gAccessDisplayMode,          sizeof(gAccessDisplayMode),             CLEAR_ON_RESET },
+        { &gAccessfgColor,              sizeof(gAccessfgColor),                 CLEAR_ON_RESET },
+        { &gAccessbgColor,              sizeof(gAccessbgColor),                 CLEAR_ON_RESET },
+        { &badLineCondition,            sizeof(badLineCondition),               CLEAR_ON_RESET },
+        { &DENwasSetInRasterline30,     sizeof(DENwasSetInRasterline30),        CLEAR_ON_RESET },
+        { &displayState,                sizeof(displayState),                   CLEAR_ON_RESET },
+        { &BAlow,                       sizeof(BAlow),                          CLEAR_ON_RESET },
+        { &BAwentLowAtCycle,            sizeof(BAwentLowAtCycle),               CLEAR_ON_RESET },
+        { &mainFrameFF,                 sizeof(mainFrameFF),                    CLEAR_ON_RESET },
+        { &verticalFrameFF,             sizeof(verticalFrameFF),                CLEAR_ON_RESET },
+        
+        { &iomem,                       sizeof(iomem),                          CLEAR_ON_RESET },
+        { &bankAddr,                    sizeof(bankAddr),                       CLEAR_ON_RESET },
+        
+        { &g_data,                      sizeof(g_data),                         CLEAR_ON_RESET },
+        { &g_character,                 sizeof(g_character),                    CLEAR_ON_RESET },
+        { &g_color,                     sizeof(g_color),                        CLEAR_ON_RESET },
+        { &g_mode,                      sizeof(g_mode),                         CLEAR_ON_RESET },
+        
+        { &mc,                          sizeof(mc),                             CLEAR_ON_RESET | BYTE_FORMAT },
+        { &mcbase,                      sizeof(mcbase),                         CLEAR_ON_RESET | BYTE_FORMAT },
+        { &spriteOnOff,                 sizeof(spriteOnOff),                    CLEAR_ON_RESET },
+        { &oldSpriteOnOff,              sizeof(oldSpriteOnOff),                 CLEAR_ON_RESET },
+        { &spriteDmaOnOff,              sizeof(spriteDmaOnOff),                 CLEAR_ON_RESET },
+        { &expansionFF,                 sizeof(expansionFF),                    CLEAR_ON_RESET },
+        { &cleared_bits_in_d017,        sizeof(cleared_bits_in_d017),           CLEAR_ON_RESET },
+        { &lightpenIRQhasOccured,       sizeof(lightpenIRQhasOccured),          CLEAR_ON_RESET },
+        { NULL,                         0,                                      0 }};
+
+    registerSnapshotItems(items, sizeof(items));
 }
 
 VIC::~VIC()
@@ -62,152 +93,37 @@ VIC::~VIC()
 }
 
 void 
-VIC::reset() 
+VIC::reset()
 {
-	debug(2, "  Resetting VIC...\n");
-		
-	// Internal registers
-	scanline = 0;
-	xCounter = 0;
-	registerVC = 0;
-	registerVCBASE = 0;
-	registerRC = 0;
-	registerVMLI = 0;
-	dmaLine = false;
-	dmaLinesEnabled = false;
-	displayState = false;
-	BAlow = 0;
-	mainFrameFF = false;
-	verticalFrameFF = false;
-	drawVerticalFrame = false;
-	drawHorizontalFrame = false;
+    VirtualComponent::reset();
 	
-	// Memory
-	memset(iomem, 0x00, sizeof(iomem));
-	iomem[0x20] = LTBLUE; // Let the border color look correct right from the beginning
-	iomem[0x21] = BLUE;   // Let the background color look correct right from the beginning
-	iomem[0x11] = 0x10;   // Make screen visible from the beginning	
-	bankAddr = 0;
-	screenMemoryAddr = 0x0000;
-	characterMemoryAddr = 0x0000;
-	characterMemoryMappedToROM = false;
-	
-	// Sprites
-	for (int i = 0; i < 8; i++) {
-		mc[i] = 0;
-		mcbase[i] = 0;
-		spriteShiftReg[i][0] = 0;
-		spriteShiftReg[i][1] = 0;
-		spriteShiftReg[i][2] = 0; 
-	}
-	spriteOnOff = 0;
-	oldSpriteOnOff = 0;
-	spriteDmaOnOff = 0;
-	expansionFF = 0xff;
-	
-	// Lightpen
-	lightpenIRQhasOccured = false;
-	
+    // Establish bindungs
+    cpu = c64->cpu;
+    mem = c64->mem;
+    
+    // Reset subcomponents
+    pixelEngine.reset();
+
+    // Internal state
+    yCounter = PAL_HEIGHT;
+    iomem[0x20] = PixelEngine::LTBLUE; // Let the border color look correct right from the beginning
+    iomem[0x21] = PixelEngine::BLUE;   // Let the background color look correct right from the beginning
+	iomem[0x11] = 0x10;                // Make screen visible from the beginning
+	expansionFF = 0xFF;
+    
+    // Remove startup graphics glitches by setting the initial value early
+    setScreenMemoryAddr(0x400);
+    
 	// Debugging	
 	drawSprites = true;
-	for (int i = 0; i < PAL_RASTERLINES; i++) {
-		rasterlineDebug[i] = -1;
-	}
 	spriteSpriteCollisionEnabled = 0xFF;
 	spriteBackgroundCollisionEnabled = 0xFF;
 }
-			
-// Loading and saving snapshots
-void
-VIC::loadFromBuffer(uint8_t **buffer)
-{
-	debug(2, "  Loading VIC state...\n");
-	
-	// Internal registers
-	scanline = read32(buffer);
-	xCounter = read16(buffer);
-	registerVC = read16(buffer);
-	registerVCBASE = read16(buffer);
-	registerRC = read16(buffer);
-	registerVMLI = read16(buffer);
-	dmaLine = (bool)read8(buffer);
-	dmaLinesEnabled = (bool)read8(buffer);
-	displayState = (bool)read8(buffer);
-	BAlow = (bool)read8(buffer);
-	mainFrameFF = (bool)read8(buffer);
-	verticalFrameFF = (bool)read8(buffer);
-	drawVerticalFrame = (bool)read8(buffer);
-	drawHorizontalFrame = (bool)read8(buffer);
-	
-	// Memory
-	for (unsigned i = 0; i < sizeof(iomem); i++)
-		iomem[i] = read8(buffer);
-	bankAddr = read16(buffer);
-	screenMemoryAddr = read16(buffer);
-	characterMemoryAddr = read16(buffer);
-	characterMemoryMappedToROM = (bool)read8(buffer);
-	
-	// Sprites
-	for (int i = 0; i < 8; i++) {
-		mc[i] = read8(buffer);
-		mcbase[i] = read8(buffer);
-		spriteShiftReg[i][0] = read8(buffer);
-		spriteShiftReg[i][1] = read8(buffer);
-		spriteShiftReg[i][2] = read8(buffer);
-	}
-	spriteOnOff = read8(buffer);
-	oldSpriteOnOff = read8(buffer);
-	spriteDmaOnOff = read8(buffer);
-	expansionFF = read8(buffer);
-	
-	// Lightpen
-	lightpenIRQhasOccured = (bool)read8(buffer);
-}
 
 void
-VIC::saveToBuffer(uint8_t **buffer)
+VIC::ping()
 {
-	debug(2, "  Saving VIC state...\n");
-
-	// Internal registers
-	write32(buffer, scanline);
-	write16(buffer, xCounter);
-	write16(buffer, registerVC);
-	write16(buffer, registerVCBASE);
-	write16(buffer, registerRC);
-	write16(buffer, registerVMLI);
-	write8(buffer, (uint8_t)dmaLine);
-	write8(buffer, (uint8_t)dmaLinesEnabled);
-	write8(buffer, (uint8_t)displayState);
-	write8(buffer, (uint8_t)BAlow);
-	write8(buffer, (uint8_t)mainFrameFF);
-	write8(buffer, (uint8_t)verticalFrameFF);
-	write8(buffer, (uint8_t)drawVerticalFrame);
-	write8(buffer, (uint8_t)drawHorizontalFrame);
-	
-	// Memory
-	for (unsigned i = 0; i < sizeof(iomem); i++)
-		write8(buffer, iomem[i]);
-	write16(buffer, bankAddr);
-	write16(buffer, screenMemoryAddr);
-	write16(buffer, characterMemoryAddr);
-	write8(buffer, characterMemoryMappedToROM);
-	
-	// Sprites
-	for (int i = 0; i < 8; i++) {
-		write8(buffer, mc[i]);
-		write8(buffer, mcbase[i]);
-		write8(buffer, spriteShiftReg[i][0]);
-		write8(buffer, spriteShiftReg[i][1]);
-		write8(buffer, spriteShiftReg[i][2]); 
-	}
-	write8(buffer, spriteOnOff);
-	write8(buffer, oldSpriteOnOff);
-	write8(buffer, spriteDmaOnOff);
-	write8(buffer, expansionFF);
-	
-	// Lightpen
-	write8(buffer, lightpenIRQhasOccured);
+    c64->putMessage(isPAL() ? MSG_PAL : MSG_NTSC);
 }
 
 void 
@@ -216,8 +132,8 @@ VIC::dumpState()
 	msg("VIC\n");
 	msg("---\n\n");
 	msg("     Bank address : %04X\n", bankAddr, bankAddr);
-	msg("    Screen memory : %04X\n", screenMemoryAddr);
-	msg(" Character memory : %04X (%s)\n", characterMemoryAddr, characterMemoryMappedToROM ? "ROM" : "RAM");
+    msg("    Screen memory : %04X\n", getScreenMemoryAddr());
+	msg(" Character memory : %04X\n", getCharacterMemoryAddr());
 	msg("  Text resolution : %d x %d\n", numberOfRows(), numberOfColumns());
 	msg("X/Y raster scroll : %d / %d\n", getHorizontalRasterScroll(), getVerticalRasterScroll());
 	msg("     Display mode : ");
@@ -240,7 +156,7 @@ VIC::dumpState()
 		default:
 			msg("Invalid\n");
 	}
-	msg("            (X,Y) : (%d,%d) %s %s\n", xCounter, scanline,  dmaLine ? "(DMA line)" : "", dmaLinesEnabled ? "" : "(DMA lines disabled)");
+	msg("            (X,Y) : (%d,%d) %s %s\n", xCounter, yCounter,  badLineCondition ? "(DMA line)" : "", DENwasSetInRasterline30 ? "" : "(DMA lines disabled, no DEN bit in rasterline 30)");
 	msg("               VC : %02X\n", registerVC);
 	msg("           VCBASE : %02X\n", registerVCBASE);
 	msg("               RC : %02X\n", registerRC);
@@ -248,8 +164,6 @@ VIC::dumpState()
 	msg("          BA line : %s\n", BAlow ? "low" : "high");
 	msg("      MainFrameFF : %d\n", mainFrameFF);
 	msg("  VerticalFrameFF : %d\n", verticalFrameFF);
-	msg("      Draw Vframe : %s\n", drawVerticalFrame ? "yes" : "no");
-	msg("      Draw Hframe : %s\n", drawHorizontalFrame ? "yes" : "no");	
 	msg("     DisplayState : %s\n", displayState ? "on" : "off");
 	msg("         SpriteOn : %02X ( ", spriteOnOff);
 	for (int i = 0; i < 8; i++) 
@@ -274,417 +188,233 @@ VIC::dumpState()
 	msg("\n");
 }
 
-
-// -----------------------------------------------------------------------------------------------
-//                                         Configuring
-// -----------------------------------------------------------------------------------------------
-
-void 
-VIC::setPAL()
-{ 
-	leftBorderWidth = PAL_LEFT_BORDER_WIDTH;
-	rightBorderWidth = PAL_RIGHT_BORDER_WIDTH;
-	upperBorderHeight = PAL_UPPER_BORDER_HEIGHT;
-	lowerBorderHeight = PAL_LOWER_BORDER_HEIGHT;
-	totalScreenWidth = PAL_VIEWABLE_PIXELS;
-	totalScreenHeight = PAL_VIEWABLE_RASTERLINES;
-	firstVisibleLine = PAL_UPPER_INVISIBLE;
-	lastVisibleLine = PAL_UPPER_INVISIBLE + PAL_VIEWABLE_RASTERLINES;
-	pixelAspectRatio = 0.9365;
-}
-
 void
-VIC::setNTSC()
+VIC::setChipModel(ChipModel model)
 {
-	leftBorderWidth = NTSC_LEFT_BORDER_WIDTH;
-	rightBorderWidth = NTSC_RIGHT_BORDER_WIDTH;
-	upperBorderHeight = NTSC_UPPER_BORDER_HEIGHT;
-	lowerBorderHeight = NTSC_LOWER_BORDER_HEIGHT;
-	totalScreenWidth = NTSC_VIEWABLE_PIXELS;
-	totalScreenHeight = NTSC_VIEWABLE_RASTERLINES;
-	firstVisibleLine = NTSC_UPPER_INVISIBLE;
-	lastVisibleLine = NTSC_UPPER_INVISIBLE + NTSC_VIEWABLE_RASTERLINES;
-	pixelAspectRatio = 0.75;
+    chipModel = model;
+    pixelEngine.resetScreenBuffers();
+    c64->putMessage(isPAL() ? MSG_PAL : MSG_NTSC);
 }
 
 
 // -----------------------------------------------------------------------------------------------
-//                                         Drawing
+//                             I/O memory handling and RAM access
 // -----------------------------------------------------------------------------------------------
 
-void 
-VIC::gAccess()
+uint8_t VIC::memAccess(uint16_t addr)
 {
-	uint8_t pattern;
-	uint8_t fgcolor;
-	uint8_t bgcolor;
-	int colorLookup[4];
-	uint16_t xCoord = (xCounter - 20) + leftBorderWidth + getHorizontalRasterScroll();
-	
-	switch (getDisplayMode()) {
-		case STANDARD_TEXT:
-			pattern   = displayState ? getCharacterPattern() : getIdleAccessPattern();
-			fgcolor   = colorSpace[registerVMLI];
-			bgcolor   = getBackgroundColor();
-			drawSingleColorCharacter(xCoord, pattern, colors[fgcolor], colors[bgcolor]);
-			break;
-		case MULTICOLOR_TEXT:
-			pattern   = displayState ? getCharacterPattern() : getIdleAccessPattern();
-			fgcolor   = colorSpace[registerVMLI];
-			if (fgcolor & 0x8) {
-				colorLookup[0] = colors[getBackgroundColor()];
-				colorLookup[1] = colors[getExtraBackgroundColor(1)];
-				colorLookup[2] = colors[getExtraBackgroundColor(2)];
-				colorLookup[3] = colors[fgcolor & 0x07];
-				drawMultiColorCharacter(xCoord, pattern, colorLookup);
-			} else {
-				drawSingleColorCharacter(xCoord, pattern, colors[fgcolor], colors[getBackgroundColor()]);
-			}
-			break;
-		case STANDARD_BITMAP:
-			pattern = displayState ? getBitmapPattern() : getIdleAccessPattern();
-			fgcolor = characterSpace[registerVMLI] >> 4;
-			bgcolor = characterSpace[registerVMLI] & 0xf;
-			drawSingleColorCharacter(xCoord, pattern, colors[fgcolor], colors[bgcolor]);
-			break;
-		case MULTICOLOR_BITMAP:
-			pattern = displayState ? getBitmapPattern() : getIdleAccessPattern();
-			colorLookup[0]  = colors[getBackgroundColor()];
-			colorLookup[1]  = colors[characterSpace[registerVMLI] >> 4];
-			colorLookup[2]  = colors[characterSpace[registerVMLI] & 0x0F];
-			colorLookup[3]  = colors[colorSpace[registerVMLI]];			
-			drawMultiColorCharacter(xCoord, pattern, colorLookup);
-			break;
-		case EXTENDED_BACKGROUND_COLOR:
-			pattern = displayState ? getExtendedCharacterPattern() : getIdleAccessPattern();
-			fgcolor = colorSpace[registerVMLI]; 
-			bgcolor = getExtraBackgroundColor(characterSpace[registerVMLI] >> 6);
-			if (fgcolor & 0x8) {
-				colorLookup[0] = colors[bgcolor];
-				colorLookup[1] = colors[getExtraBackgroundColor(1)];
-				colorLookup[2] = colors[getExtraBackgroundColor(2)];
-				colorLookup[3] = colors[fgcolor & 0x07];
-				drawMultiColorCharacter(xCoord, pattern, colorLookup);
-			} else {
-				drawSingleColorCharacter(xCoord, pattern, colors[fgcolor], colors[getBackgroundColor()]);
-			}
-			break;		
-		case INVALID_DISPLAY_MODE:
-			// do nothing (?)
-			break;
-	}
-	
-	// VC and VMLI are increased after each g access 
-	if (displayState) {
-		registerVC++;
-		registerVC &= 0x3ff; // 10 bit overflow
-		registerVMLI++;
-		registerVMLI &= 0x3f; // 6 bit overflow; 	
-	}
+    /* "Der VIC besitzt nur 14 Adreﬂleitungen, kann also nur 16KB Speicher
+        adressieren. Er kann trotzdem auf die kompletten 64KB Hauptspeicher
+        zugreifen, denn die 2 fehlenden oberen Adressbits werden von einem der
+        CIA-I/O-Chips zur Verfügung gestellt (es sind dies die invertierten Bits 0
+        und 1 von Port A der CIA 2). Damit kann jeweils eine von 4 16KB-Bänken für
+        den VIC eingestellt werden." [C.B.]
+
+       "Das Char-ROM wird in den Bänken 0 und 2 jeweils an den VIC-Adressen
+        $1000-$1fff eingeblendet" [C.B.] */
+    
+    assert((addr & 0xC000) == 0); /* 14 bit address */
+    
+    addrBus = bankAddr + addr;
+    
+    if ((addrBus & 0x7000) == 0x1000) {
+
+        // Accessing range 0x1000 - 0x1FFF or 0x9000 - 0x9FFF
+        // Character ROM is blended in here
+        assert ((0xC000 + addr) >= 0xD000 && (0xC000 + addr) <= 0xDFFF);
+        dataBus = mem->rom[0xC000 + addr];
+
+    } else {
+        dataBus = mem->ram[addrBus];
+    }
+    
+    return dataBus;
 }
 
-inline void 
-VIC::cAccess()
+uint8_t VIC::memIdleAccess()
 {
-	if (dmaLine) {
-		characterSpace[registerVMLI] = mem->ram[bankAddr + screenMemoryAddr + registerVC];
-		// colorSpace[registerVMLI] = mem->peekColorRam(registerVC) & 0xf;
-		colorSpace[registerVMLI] = mem->colorRam[registerVC] & 0xf;
-	}
+    // return memAccess(0x3FFF);
+    addrBus = bankAddr + 0x3FFF;
+    return mem->ram[addrBus];
 }
 
-inline void 
-VIC::drawSingleColorCharacter(unsigned offset, uint8_t pattern, int fgcolor, int bgcolor)
+inline void VIC::cAccess()
 {
-	assert(offset >= 0 && offset+7 < MAX_VIEWABLE_PIXELS);
-	if (pattern & 128) setForegroundPixel(offset+0, fgcolor); else setBackgroundPixel(offset+0, bgcolor);
-	if (pattern & 64)  setForegroundPixel(offset+1, fgcolor); else setBackgroundPixel(offset+1, bgcolor);
-	if (pattern & 32)  setForegroundPixel(offset+2, fgcolor); else setBackgroundPixel(offset+2, bgcolor);
-	if (pattern & 16)  setForegroundPixel(offset+3, fgcolor); else setBackgroundPixel(offset+3, bgcolor);
-	if (pattern & 8)   setForegroundPixel(offset+4, fgcolor); else setBackgroundPixel(offset+4, bgcolor);
-	if (pattern & 4)   setForegroundPixel(offset+5, fgcolor); else setBackgroundPixel(offset+5, bgcolor);
-	if (pattern & 2)   setForegroundPixel(offset+6, fgcolor); else setBackgroundPixel(offset+6, bgcolor);
-	if (pattern & 1)   setForegroundPixel(offset+7, fgcolor); else setBackgroundPixel(offset+7, bgcolor);
+    // Only proceed if the BA line is pulled down
+    if (!badLineCondition)
+        return;
+
+    // If BA is pulled down for at least three cycles, perform memory access
+    if (BApulledDownForAtLeastThreeCycles()) {
+        
+        // |VM13|VM12|VM11|VM10| VC9| VC8| VC7| VC6| VC5| VC4| VC3| VC2| VC1| VC0|
+        uint16_t addr = (VM13VM12VM11VM10() << 6) | registerVC;
+        
+        characterSpace[registerVMLI] = memAccess(addr);
+        colorSpace[registerVMLI] = mem->colorRam[registerVC] & 0x0F;
+    }
+    
+    // VIC has no access, yet
+    else {
+        
+        /* "Trotzdem greift der VIC auf die Videomatrix zu, oder versucht es zumindest,
+            denn solange AEC in der zweiten Taktphase noch High ist, sind die
+            Adressbustreiber und Datenbustreiber D0-D7 des VIC im Tri-State und der VIC
+            liest statt der Daten aus der Videomatrix in den ersten drei Zyklen den
+            Wert $ff an D0-D7. Die Datenleitungen D8-D13 des VIC haben allerdings
+            keinen Tri-State-Treiber und sind immer auf Eingang geschaltet. Allerdings
+            bekommt der VIC auch dort keine g¸ltigen Farb-RAM-Daten, denn da AEC High
+            ist, kontrolliert offiziell der 6510 noch den Bus und sofern dieser nicht
+            zufällig gerade den nächsten Opcode vom Farb-RAM lesen will, ist der
+            Chip-Select-Eingang des Farb-RAMs nicht aktiv.
+         
+            Lange Rede, kurzer Sinn: Der VIC liest in den ersten drei
+            Zyklen, nachdem BA auf Low gegangen ist als Zeichenzeiger $ff und als
+            Farbinformation die untersten 4 Bit des Opcodes nach dem Zugriff auf $d011.
+            Erst danach werden wieder reguläre Videomatrixdaten gelesen." [C.B.] */
+        
+        characterSpace[registerVMLI] = 0xFF;
+        colorSpace[registerVMLI] = c64->mem->ram[cpu->getPC()] & 0x0F;
+    }
 }
 
-inline void 
-VIC::drawMultiColorCharacter(unsigned offset, uint8_t pattern, int *colorLookup)
+inline void VIC::gAccess()
 {
-	assert(offset+7 < MAX_VIEWABLE_PIXELS);
+    uint16_t addr;
+    
+    assert ((registerVC & 0xFC00) == 0); // 10 bit register
+    assert ((registerRC & 0xF8) == 0);   // 3 bit register
 
-	int col;
-	uint8_t colBits;
-	colBits = (pattern >> 6) & 0x03;
-	col = colorLookup[colBits];
-	if (colBits & 0x02) {
-		setForegroundPixel(offset, col);
-		setForegroundPixel(offset + 1, col);
-	} else {
-		setBackgroundPixel(offset, col);
-		setBackgroundPixel(offset + 1, col);
-	}
-	offset += 2;
-	
-	colBits = (pattern >> 4) & 0x03;
-	col = colorLookup[colBits];
-	if (colBits & 0x02) {
-		setForegroundPixel(offset, col);
-		setForegroundPixel(offset + 1, col);
-	} else {
-		setBackgroundPixel(offset, col);
-		setBackgroundPixel(offset + 1, col);
-	}
-	offset += 2;
-	
-	colBits = (pattern >> 2) & 0x03;
-	col = colorLookup[colBits];
-	if (colBits & 0x02) {
-		setForegroundPixel(offset, col);
-		setForegroundPixel(offset + 1, col);
-	} else {
-		setBackgroundPixel(offset, col);
-		setBackgroundPixel(offset + 1, col);
-	}
-	offset += 2;
-	
-	colBits = (pattern >> 0) & 0x03;
-	col = colorLookup[colBits];
-	if (colBits & 0x02) {
-		setForegroundPixel(offset, col);
-		setForegroundPixel(offset + 1, col);
-	} else {
-		setBackgroundPixel(offset, col);
-		setBackgroundPixel(offset + 1, col);
-	}	
+    if (displayState) {
+
+        // "Der Adressgenerator für die Text-/Bitmap-Zugriffe (c- und g-Zugriffe)
+        //  besitzt bei den g-Zugriffen im wesentlichen 3 Modi (die c-Zugriffe erfolgen
+        //  immer nach dem selben Adressschema). Im Display-Zustand wählt das BMM-Bit
+        //  entweder Zeichengenerator-Zugriffe (BMM=0) oder Bitmap-Zugriffe (BMM=1)
+        //  aus" [C.B.]
+        
+        //  BMM = 1 : |CB13| VC9| VC8| VC7| VC6| VC5| VC4| VC3| VC2| VC1| VC0| RC2| RC1| RC0|
+        //  BMM = 0 : |CB13|CB12|CB11| D7 | D6 | D5 | D4 | D3 | D2 | D1 | D0 | RC2| RC1| RC0|
+        
+        if (BMMbitInPreviousCycle()) {
+            addr = (CB13() << 10) | (registerVC << 3) | registerRC;
+        } else {
+            addr = (CB13CB12CB11() << 10) | (characterSpace[registerVMLI] << 3) | registerRC;
+        }
+
+        // "Bei gesetztem ECM-Bit schaltet der Adressgenerator bei den g-Zugriffen die
+        //  Adressleitungen 9 und 10 immer auf Low, bei ansonsten gleichem Adressschema
+        //  (z.B. erfolgen dann die g-Zugriffe im Idle-Zustand an Adresse $39ff)." [C.B.]
+        
+        if (ECMbitInPreviousCycle())
+            addr &= 0xF9FF;
+
+        // Prepare graphic sequencer
+        g_data = memAccess(addr);
+        g_character = characterSpace[registerVMLI];
+        g_color = colorSpace[registerVMLI];
+        g_mode = getDisplayMode();
+        
+        // "Nach jedem g-Zugriff im Display-Zustand werden VC und VMLI erhöht." [C.B.]
+        registerVC++;
+        registerVC &= 0x3FF; // 10 bit overflow
+        registerVMLI++;
+        registerVMLI &= 0x3F; // 6 bit overflow
+        
+    } else {
+    
+        // "Im Idle-Zustand erfolgen die g-Zugriffe immer an Videoadresse $3fff." [C.B.]
+        addr = ECMbitInPreviousCycle() ? 0x39FF : 0x3FFF;
+        
+        // Prepare graphic sequencer
+        g_data = memAccess(addr);
+        g_character = 0;
+        g_color = 0;
+        g_mode = getDisplayMode();
+    }
 }
 
-inline void 
-VIC::setForegroundPixel(unsigned offset, int color) 
+inline void VIC::pAccess(int sprite)
 {
-	pixelBuffer[offset] = color;
-	zBuffer[offset]     = 0x10; //TODO: deprecated
-	pixelSource[offset] = 0x80; //
+    // |VM13|VM12|VM11|VM10|  1 |  1 |  1 |  1 |  1 |  1 |  1 |  Spr.-Nummer |
+    spritePtr[sprite] = memAccess((VM13VM12VM11VM10() << 6) | 0x03F8 | sprite) << 6;
+
 }
 
-inline void 
-VIC::setBackgroundPixel(unsigned offset, int color) 
+// TODO: Change return type to void
+inline bool VIC::sFirstAccess(int sprite)
 {
-	pixelBuffer[offset] = color;
+    uint8_t data = 0x00; // TODO: VICE is doing this: vicii.last_bus_phi2;
+    bool memAccessed = false;
+    
+    if (spriteDmaOnOff & (1 << sprite)) {
+        
+        if (BApulledDownForAtLeastThreeCycles()) {
+            data = memAccess(spritePtr[sprite] | mc[sprite]);
+            memAccessed = true;
+        }
+
+        mc[sprite]++;
+        mc[sprite] &= 0x3F; // 6 bit overflow
+    }
+    
+    // load data into shift register
+    // pixelEngine.sprite_sr[sprite].data.chunk[0] = data;
+    pixelEngine.sprite_sr[sprite].data = data;
+    return memAccessed;
 }
 
-inline void 
-VIC::setSpritePixel(unsigned offset, int color, int nr) 
-{	
-	uint8_t mask = (1 << nr);
-	
-	if (offset < totalScreenWidth) {
-		int depth = spriteDepth(nr);
-		if (depth < zBuffer[offset]) {
-			pixelBuffer[offset] = color;
-			zBuffer[offset] = depth;
-		}
-		
-		// Check sprite/sprite collision
-		if ((spriteSpriteCollisionEnabled & mask) && (pixelSource[offset] & 0x7F)) {
-			iomem[0x1E] |= ((pixelSource[offset] & 0x7F) | mask);
-			triggerIRQ(4);
-		}
-		
-		// Check sprite/background collision
-		if ((spriteBackgroundCollisionEnabled & mask) && (pixelSource[offset] & 0x80)) {
-			iomem[0x1F] |= mask;
-			triggerIRQ(2);
-		}
-		
-		if (nr < 7)
-			pixelSource[offset] |= mask;
-	}
-}
-
-void inline
-VIC::drawAllSprites()
-{	
-	if (drawSprites) {
-		for (int i = 0; i < 8; i++) {
-			if (oldSpriteOnOff & (1 << i)) {
-				drawSprite(i);
-			}				
-		}
-	}
-}
-
-void
-VIC::drawSprite(uint8_t nr)
+// TODO: Change return type to void
+inline bool VIC::sSecondAccess(int sprite)
 {
-	assert(nr < 8);
-	
-	int spriteX, offset;
-	spriteX = getSpriteX(nr);
-	
-	if (spriteX < 488) 
-		offset = spriteX + (leftBorderWidth - 22);
-	else
-		offset = spriteX + (leftBorderWidth - 22) - 488; 
-	
-	if (spriteIsMulticolor(nr)) {
-		
-		int colorLookup[4] = { 
-			0x00, 
-			colors[spriteExtraColor1()], 
-			colors[spriteColor(nr)],
-			colors[spriteExtraColor2()]
-		};
-		
-		for (int i = 0; i < 3; i++) {
-			uint8_t pattern = spriteShiftReg[nr][i]; 
-			
-			uint8_t col;
-			if (spriteWidthIsDoubled(nr)) {
-				col = (pattern >> 6) & 0x03;
-				if (col) {
-					setSpritePixel(offset, colorLookup[col], nr);
-					setSpritePixel(offset+1, colorLookup[col], nr);
-					setSpritePixel(offset+2, colorLookup[col], nr);
-					setSpritePixel(offset+3, colorLookup[col], nr);
-				}
-				col = (pattern >> 4) & 0x03;
-				if (col) {
-					setSpritePixel(offset+4, colorLookup[col], nr);
-					setSpritePixel(offset+5, colorLookup[col], nr);
-					setSpritePixel(offset+6, colorLookup[col], nr);
-					setSpritePixel(offset+7, colorLookup[col], nr);
-				}
-				col = (pattern >> 2) & 0x03;
-				if (col) {
-					setSpritePixel(offset+8, colorLookup[col], nr);
-					setSpritePixel(offset+9, colorLookup[col], nr);
-					setSpritePixel(offset+10, colorLookup[col], nr);
-					setSpritePixel(offset+11, colorLookup[col], nr);
-				}
-				col = pattern & 0x03;
-				if (col) {
-					setSpritePixel(offset+12, colorLookup[col], nr);
-					setSpritePixel(offset+13, colorLookup[col], nr);
-					setSpritePixel(offset+14, colorLookup[col], nr);
-					setSpritePixel(offset+15, colorLookup[col], nr);
-				}				
-				offset += 16;
-			} else {
-				col = (pattern >> 6) & 0x03;
-				if (col) {
-					setSpritePixel(offset, colorLookup[col], nr);
-					setSpritePixel(offset+1, colorLookup[col], nr);
-				}
-				col = (pattern >> 4) & 0x03;
-				if (col) {
-					setSpritePixel(offset+2, colorLookup[col], nr);
-					setSpritePixel(offset+3, colorLookup[col], nr);
-				}
-				col = (pattern >> 2) & 0x03;
-				if (col) {
-					setSpritePixel(offset+4, colorLookup[col], nr);
-					setSpritePixel(offset+5, colorLookup[col], nr);
-				}
-				col = pattern & 0x03;
-				if (col) {
-					setSpritePixel(offset+6, colorLookup[col], nr);
-					setSpritePixel(offset+7, colorLookup[col], nr);
-				}				
-				offset += 8;
-			}
-		}
-	} else {
-		int fgcolor = colors[spriteColor(nr)]; 
-		for (int i = 0; i < 3; i++) {
-			uint8_t pattern = spriteShiftReg[nr][i]; 
-			
-			if (spriteWidthIsDoubled(nr)) {
-				if (pattern & 128) {
-					setSpritePixel(offset, fgcolor, nr);
-					setSpritePixel(offset+1, fgcolor, nr);
-				}
-				if (pattern & 64) {
-					setSpritePixel(offset+2, fgcolor, nr);
-					setSpritePixel(offset+3, fgcolor, nr);
-				}
-				if (pattern & 32) {
-					setSpritePixel(offset+4, fgcolor, nr);
-					setSpritePixel(offset+5, fgcolor, nr);
-				}
-				if (pattern & 16) {
-					setSpritePixel(offset+6, fgcolor, nr);
-					setSpritePixel(offset+7, fgcolor, nr);
-				}
-				if (pattern & 8) {
-					setSpritePixel(offset+8, fgcolor, nr);
-					setSpritePixel(offset+9, fgcolor, nr);
-				}
-				if (pattern & 4) {
-					setSpritePixel(offset+10, fgcolor, nr);
-					setSpritePixel(offset+11, fgcolor, nr);
-				}
-				if (pattern & 2) {
-					setSpritePixel(offset+12, fgcolor, nr);
-					setSpritePixel(offset+13, fgcolor, nr);
-				}
-				if (pattern & 1) {
-					setSpritePixel(offset+14, fgcolor, nr);
-					setSpritePixel(offset+15, fgcolor, nr);
-				}
-				offset += 16;
-			} else {
-				if (pattern & 128) {
-					setSpritePixel(offset, fgcolor, nr);
-				}
-				if (pattern & 64) {
-					setSpritePixel(offset+1, fgcolor, nr);
-				}
-				if (pattern & 32) {
-					setSpritePixel(offset+2, fgcolor, nr);
-				}
-				if (pattern & 16) {
-					setSpritePixel(offset+3, fgcolor, nr);
-				}
-				if (pattern & 8) {
-					setSpritePixel(offset+4, fgcolor, nr);
-				}
-				if (pattern & 4) {
-					setSpritePixel(offset+5, fgcolor, nr);
-				}
-				if (pattern & 2) {
-					setSpritePixel(offset+6, fgcolor, nr);
-				}
-				if (pattern & 1) {
-					setSpritePixel(offset+7, fgcolor, nr);
-				}
-				offset += 8;
-			}
-		}
-	}
+    uint8_t data = 0x00; // TODO: VICE is doing this: vicii.last_bus_phi2;
+    bool memAccessed = false;
+    
+    if (spriteDmaOnOff & (1 << sprite)) {
+        
+        if (BApulledDownForAtLeastThreeCycles()) {
+            data = memAccess(spritePtr[sprite] | mc[sprite]);
+            memAccessed = true;
+        }
+        
+        mc[sprite]++;
+        mc[sprite] &= 0x3F; // 6 bit overflow
+    }
+    
+    // If no memory access has happened here, we perform an idle access
+    // The obtained data might be overwritten by the third sprite access
+    if (!memAccessed)
+        memIdleAccess();
+    
+    // load data into shift register
+    // pixelEngine.sprite_sr[sprite].data.chunk[1] = data;
+    pixelEngine.sprite_sr[sprite].data = (pixelEngine.sprite_sr[sprite].data << 8) | data;
+    return memAccessed;
 }
 
-void inline
-VIC::drawHorizontalBorder()
+// TODO: Change return type to void
+inline bool VIC::sThirdAccess(int sprite)
 {
-	int bcolor = colors[getBorderColor()];
-	
-	for (unsigned i = 0; i < (unsigned)xStart(); i++) {
-		pixelBuffer[i] = bcolor;
-	}
-	for (unsigned i = xEnd(); i < totalScreenWidth; i++) {
-		pixelBuffer[i] = bcolor;
-	}
+    uint8_t data = 0x00; // TODO: VICE is doing this: vicii.last_bus_phi2;
+    bool memAccessed = false;
+    
+    if (spriteDmaOnOff & (1 << sprite)) {
+        
+        if (BApulledDownForAtLeastThreeCycles()) {
+            data = memAccess(spritePtr[sprite] | mc[sprite]);
+            memAccessed = true;
+        }
+
+        mc[sprite]++;
+        mc[sprite] &= 0x3F; // 6 bit overflow
+    }
+    
+    // load data into shift register
+    // pixelEngine.sprite_sr[sprite].data.chunk[2] = data;
+    pixelEngine.sprite_sr[sprite].data = (pixelEngine.sprite_sr[sprite].data << 8) | data;
+    return memAccessed;
 }
 
-void inline
-VIC::drawVerticalBorder()
-{
-	int bcolor = colors[getBorderColor()];
-	
-	for (unsigned i = 0; i < totalScreenWidth; i++) {
-		pixelBuffer[i] = bcolor;
-	}
-}
 
 // -----------------------------------------------------------------------------------------------
 //                                       Getter and setter
@@ -702,52 +432,37 @@ VIC::setMemoryBankAddr(uint16_t addr)
 	assert(addr % 0x4000 == 0);
 	
 	bankAddr = addr;
-	
-	// changing the memory bank also affects the start address of the screen and character memory
-	setScreenMemoryAddr((iomem[0x18] & 0xF0) << 6);
-	setCharacterMemoryAddr((iomem[0x18] & 0x0E) << 10);
 }
 
 uint16_t
 VIC::getScreenMemoryAddr()
 {
-	return screenMemoryAddr;
+    return VM13VM12VM11VM10() << 6;
 }
 
 void
 VIC::setScreenMemoryAddr(uint16_t addr)
 {
-	assert(addr <= 0x3C00);
-	assert(addr % 0x400 == 0);
-	screenMemoryAddr = addr;
+    assert((addr & ~0x3C00) == 0);
+    
+    addr >>= 6;
+    iomem[0x18] = (iomem[0x18] & ~0xF0) | (addr & 0xF0);
 }
 
-uint16_t 
+uint16_t
 VIC::getCharacterMemoryAddr()
 {
-	return characterMemoryAddr % 0x4000;
+    return (CB13CB12CB11() << 10) % 0x4000;
 }
+
 
 void 
 VIC::setCharacterMemoryAddr(uint16_t addr)
 {
-	assert(addr <= 0x3800);
-	assert(addr % 0x800 == 0);
+    assert((addr & ~0x3800) == 0);
 	
-	if (bankAddr == 0x0000 || bankAddr == 0x8000) {
-		if (addr == 0x1000) {
-			characterMemoryMappedToROM = true;
-			characterMemoryAddr = 0xD000;
-			return;
-		}
-		if (addr == 0x1800) {
-			characterMemoryMappedToROM = true;
-			characterMemoryAddr = 0xD800;
-			return;
-		}
-	}
-	characterMemoryMappedToROM = false;
-	characterMemoryAddr = bankAddr + addr;
+    addr >>= 10;
+    iomem[0x18] = (iomem[0x18] & ~0x0E) | (addr & 0x0E);
 }
 
 uint8_t 
@@ -759,27 +474,40 @@ VIC::peek(uint16_t addr)
 	
 	switch(addr) {
 		case 0x11: // SCREEN CONTROL REGISTER #1
-			result = (iomem[addr] & 0x7f) + (scanline > 0xff ? 128 : 0);
-			return result;		
+			result = (iomem[addr] & 0x7f) + (yCounter > 0xff ? 128 : 0);
+			return result;
+            
 		case 0x12: // VIC_RASTER_READ_WRITE
-			result = scanline & 0xff;
+			result = yCounter & 0xff;
 			return result;
-		case 0x13:
-			debug(2, "Reading lightpen X position: %d\n", iomem[addr]);
-			return iomem[addr];			
-		case 0x14:
-			debug(2, "Reading lightpen Y position: %d\n", iomem[addr]);
-			return iomem[addr];			
+            
+		case 0x13: // LIGHTPEN X
+			return iomem[addr];
+            
+		case 0x14: // LIGHTPEN Y
+			return iomem[addr];
+            
+        case 0x16:
+            result = iomem[addr] | 0xC0; // Bits 7 and 8 are unused (always 1)
+            return result;
+            
+   		case 0x18:
+            result = iomem[addr] | 0x01; // Bit 1 is unused (always 1)
+            return result;
+            
 		case 0x19:
-			result = iomem[addr] | 0x70; // Bits 4 to 6 are not used and always contain "1"
+			result = iomem[addr] | 0x70; // Bits 4 to 6 are unused (always 1)
 			return result;
+            
 		case 0x1A:
-			result = iomem[addr] | 0xF0; // Bits 4 to 7 are not used and always contain "1"
+			result = iomem[addr] | 0xF0; // Bits 4 to 7 are unsed (always 1)
 			return result;
+            
 		case 0x1E: // Sprite-to-sprite collision
 			result = iomem[addr];
 			iomem[addr] = 0x00;  // Clear on read
 			return result;
+            
 		case 0x1F: // Sprite-to-background collision
 			result = iomem[addr];
 			iomem[addr] = 0x00;  // Clear on read
@@ -787,8 +515,8 @@ VIC::peek(uint16_t addr)
 	}
 	
 	if (addr >= 0x20 && addr <= 0x2E) {
-		// Color registers: Bits 4 to 7 are not used and always contain "1"
-		return iomem[addr] | 0xF0;
+		// Color registers
+		return iomem[addr] | 0xF0; // Bits 4 to 7 are unsed (always 1)
 	}
 	
 	if (addr >= 0x2F && addr <= 0x3F) {
@@ -810,46 +538,51 @@ VIC::poke(uint16_t addr, uint8_t value)
 			if ((iomem[addr] & 0x80) != (value & 0x80)) {
 				// Value changed: Check if we need to trigger an interrupt immediately
 				iomem[addr] = value;
-				if (scanline == rasterInterruptLine())
+				if (yCounter == rasterInterruptLine())
 					triggerIRQ(1);
 			} else {
 				iomem[addr] = value;
 			}
 			
-			// Bit 4 is the DEN bit and controls whether DMA lines are enabled or disabled. 
-			// Note that it is only inspected in rasterline 0x30
-			if (scanline == 0x30 && (value & 0x10))
-				dmaLinesEnabled = true;
+			// Check the DEN bit if we're in rasterline 30
+            // If it's set at some point in that line, bad line conditions can occur
+			if (yCounter == 0x30 && (value & 0x10) != 0)
+                DENwasSetInRasterline30 = true;
 			
-			// Bit 0 - 3 determine the vertical scroll offset. By changing these bits, the DMA line condition 
-			// can appear or disappear in the middle of a rasterline.
-			checkDmaLineCondition();
+			// Bits 0 - 3 determine the vertical scroll offset.
+            // Changing these bits directly affects the badline line condition the middle of a rasterline
+			updateBadLineCondition();
 			return;
 			
 		case 0x12: // RASTER_COUNTER
 			if (iomem[addr] != value) {
 				// Value changed: Check if we need to trigger an interrupt immediately
 				iomem[addr] = value;
-				if (scanline == rasterInterruptLine())
+				if (yCounter == rasterInterruptLine())
 					triggerIRQ(1);
 			} else {
 				iomem[addr] = value;
 			}
 			return;
-			
-		case 0x16:
-			iomem[addr] = value | (128 + 64); // The upper two bits are unused and always return 1 when read
-			return;
-			
-		case 0x17:
+				
+        /*
+        case 0x16:
+            // DEBUG CODE WAS HERE
+            break;
+        */
+            
+		case 0x17: // SPRITE Y EXPANSION
 			iomem[addr] = value;
+            cleared_bits_in_d017 = (~value) & (~expansionFF);
+            
+            /* "1. Das Expansions-Flipflop ist gesetzt, solange das zum jeweiligen Sprite
+                   gehörende Bit MxYE in Register $d017 gelöscht ist." [C.B.] */
+            
 			expansionFF |= ~value;
 			return;
 			
 		case 0x18: // MEMORY_SETUP_REGISTER
-			iomem[addr] = value | 0x01; // Bit 0 is unused and always 1 when read
-			setScreenMemoryAddr((value & 0xF0) << 6);
-			setCharacterMemoryAddr((value & 0x0E) << 10);
+            iomem[addr] = value;
 			return;
 			
 		case 0x19: // IRQ flags
@@ -875,7 +608,7 @@ VIC::poke(uint16_t addr, uint8_t value)
 		case 0x1F:
 			// Writing has no effect
 			return;
-	}
+    }
 	
 	// Default action
 	iomem[addr] = value;
@@ -914,18 +647,20 @@ VIC::getScreenGeometry()
 //                                DMA lines, BA signal and IRQs
 // -----------------------------------------------------------------------------------------------
 
-void 
-VIC::pullDownBA(uint16_t source)
-{ 
-	BAlow |= source;
-	cpu->setRDY(BAlow == 0); 
+inline void
+VIC::setBAlow(bool value)
+{
+    if (!BAlow && value) {
+        BAwentLowAtCycle = c64->getCycles();
+    }
+    BAlow = value;
+    cpu->setRDY(value == 0);
 }
 
-void 
-VIC::releaseBA(uint16_t source)
-{ 
-	BAlow &= ~source;
-	cpu->setRDY(BAlow == 0); 
+inline bool
+VIC::BApulledDownForAtLeastThreeCycles()
+{
+    return BAlow && (c64->getCycles() - BAwentLowAtCycle > 2);
 }
 
 void 
@@ -936,31 +671,27 @@ VIC::triggerIRQ(uint8_t source)
 		// Interrupt is enabled
 		iomem[0x19] |= 128;
 		cpu->setIRQLineVIC();
-		// debug("Interrupting at rasterline %x %d\n", scanline, scanline);
+		// debug("Interrupting at rasterline %x %d\n", yCounter, yCounter);
 	}
 }
 
 void
-VIC::simulateLightPenInterrupt()
+VIC::triggerLightPenInterrupt()
 {
-	int x, x_max, y;
-	
-	if (!lightpenIRQhasOccured) {
+    // https://svn.code.sf.net/p/vice-emu/code/testprogs/VICII/lp-trigger/
+
+    if (!lightpenIRQhasOccured) {
 
 		// lightpen interrupts can only occur once per frame
 		lightpenIRQhasOccured = true;
 
 		// determine current coordinates
-		x_max = 8 * c64->getCyclesPerRasterline() - 4;
-		if (xCounter >= 16)
-			x = xCounter - 12;
-		else 
-			x = x_max - xCounter;
-		y = scanline;
+        int x = xCounter;
+        int y = yCounter;
 				
 		// latch coordinates 
 		iomem[0x13] = x / 2; // value equals the current x coordinate divided by 2
-		iomem[0x14] = y + 1; // value is based on sprite coordinate system (hence, + 1)
+		iomem[0x14] = y;
 
 		// Simulate interrupt
 		triggerIRQ(0x08);
@@ -971,804 +702,1330 @@ VIC::simulateLightPenInterrupt()
 //                                              Sprites
 // -----------------------------------------------------------------------------------------------
 
-void 
-VIC::updateSpriteDmaOnOff()
+void
+VIC::turnSpriteDmaOff()
 {
-	// determine which sprites are displayes in the next rasterline
-	for (int i = 0; i < 8; i++) {
-		if (spriteIsEnabled(i)) {
-			uint8_t y = getSpriteY(i);
-			if (y == (scanline & 0xff)) {
-				spriteDmaOnOff |= (1 << i);
-				mcbase[i] = 0;
-				if (spriteHeightIsDoubled(i))
-					expansionFF &= ~(1 << i);
-			}
-		}
-	}
+    // "7. In the first phase of cycle 16, [1] it is checked if the expansion flip flop
+    //     is set. If so, [2] MCBASE load from MC (MC->MCBASE), [3] unless the CPU cleared
+    //     the Y expansion bit in $d017 in the second phase of cycle 15, in which case
+    //     [4] MCBASE is set to X = (101010 & (MCBASE & MC)) | (010101 & (MCBASE | MC)).
+    //     After the MCBASE update, [5] the VIC checks if MCBASE is equal to 63 and [6] turns
+    //     off the DMA of the sprite if it is." [VIC Addendum]
+    
+    for (unsigned i = 0; i < 8; i++) {
+        if (GET_BIT(expansionFF,i)) { /* [1] */
+            if (GET_BIT(cleared_bits_in_d017,i)) { /* [3] */
+                uint8_t b101010 = 0x2A;
+                uint8_t b010101 = 0x15;
+                mcbase[i] = (b101010 & (mcbase[i] & mc[i])) | (b010101 & (mcbase[i] | mc[i])); /* [4] */
+            } else {
+                mcbase[i] = mc[i]; /* [2] */
+            }
+            
+            if (mcbase[i] == 63) { /* [5] */
+                CLR_BIT(spriteDmaOnOff,i); /* [6] */
+            }
+        }
+    }
+
+}
+
+void
+VIC::turnSpriteDmaOn()
+{
+    // "3. In den ersten Phasen von Zyklus 55 und 56 wird für jedes Sprite geprüft,
+    //     ob [1] das entsprechende MxE-Bit in Register $d015 gesetzt und [2] die
+    //     Y-Koordinate des Sprites (ungerade Register $d001-$d00f) gleich den
+    //     unteren 8 Bits von RASTER ist. Ist dies der Fall und [3] der DMA für das
+    //     Sprite noch ausgeschaltet, wird [4] der DMA angeschaltet, [5] MCBASE gelöscht[.]" [C.B.]
+    
+    for (unsigned i = 0; i < 8; i++) {
+        if (spriteIsEnabled(i)) { /* [1] */
+            if (getSpriteY(i) == (yCounter & 0xff)) { /* [2] */
+                if (!GET_BIT(spriteDmaOnOff,i)) { /* [3] */
+                    SET_BIT(spriteDmaOnOff,i); /* [4] */
+                    mcbase[i] = 0; /* [5] */
+                    SET_BIT(expansionFF,i); // will be flipped for stretched sprites in cycle 56
+                }
+            }
+        }
+    }
+}
+
+void
+VIC::toggleExpansionFlipflop()
+{
+    // A '1' in D017 means that the sprite is vertically stretched
+    expansionFF ^= iomem[0x17];
+}
+
+void
+VIC::turnSpriteDisplayOn()
+{
+    // "4. In der ersten Phase von Zyklus 58 wird [1] für jedes Sprite [2] MC mit MCBASE
+    //     geladen (MCBASE->MC) und geprüft, [3] ob der DMA für das Sprite angeschaltet
+    //     und [4] die Y-Koordinate des Sprites gleich den unteren 8 Bits von RASTER
+    //     ist. Ist dies der Fall, wird [5] die Darstellung des Sprites angeschaltet." [C.B.]
+    
+    oldSpriteOnOff = spriteOnOff;
+    for (unsigned i = 0; i < 8; i++) { /* [1] */
+        mc[i] = mcbase[i]; /* [2] */
+        if (GET_BIT(spriteDmaOnOff, i)) { /* [3] */
+            if (getSpriteY(i) == (yCounter & 0xFF)) /* [4] */
+                SET_BIT(spriteOnOff,i); /* [5] */
+        }
+#if 0
+         else {
+            // switch off sprites with no dma access
+            CLR_BIT(spriteOnOff, i);
+        }
+#endif
+        
+    }
+}
+
+void
+VIC::turnSpriteDisplayOff()
+{
+    // switch off sprites if dma is off
+    for (int i = 0; i < 8; i++) {
+        if (GET_BIT(spriteOnOff, i) && !GET_BIT(spriteDmaOnOff, i))
+            CLR_BIT(spriteOnOff, i);
+    }
 }
 
 
 // -----------------------------------------------------------------------------------------------
-//                                    Execution functions
+//                                      Frame flipflops
 // -----------------------------------------------------------------------------------------------
+
+void
+VIC::checkVerticalFrameFF()
+{
+    // Check for upper border
+    if (yCounter == upperComparisonValue() && DENbit()) {
+        verticalFrameFFclearCond = true;
+    }
+    // Trigger immediately (similar to VICE)
+    if (verticalFrameFFclearCond) {
+        verticalFrameFF = false;
+    }
+    
+    // Check for lower border
+    if (yCounter == lowerComparisonValue()) {
+        verticalFrameFFsetCond = true;
+        verticalFrameFF = true;
+    }
+    // Trigger immediately (VICE does this in cycle 1)
+    if (verticalFrameFFsetCond) {
+        verticalFrameFF = true;
+    }
+
+}
+
+void
+VIC::checkFrameFlipflopsLeft(uint16_t comparisonValue)
+{
+    if (comparisonValue == leftComparisonValue()) {
+
+        // "6. Erreicht die X-Koordinate den linken Vergleichswert und ist das
+        //     vertikale Rahmenflipflop gelöscht, wird das Haupt-Flipflop gelöscht." [C.B.]
+        clearMainFrameFF();
+    }
+
+}
+
+void
+VIC::checkFrameFlipflopsRight(uint16_t comparisonValue)
+{
+    // "1. Erreicht die X-Koordinate den rechten Vergleichswert, wird das
+    //     Haupt-Rahmenflipflop gesetzt." [C.B.]
+    
+    if (comparisonValue == rightComparisonValue()) {
+        mainFrameFF = true;
+    }
+
+}
+
+// -----------------------------------------------------------------------------------------------
+//                                    Execution functions
+//
+// All cycles are processed in this order:
+//
+//   Phi1.1 Frame logic
+//   Phi1.2 Draw
+//   Phi1.3 Fetch
+//   Phi2.1 Rasterline interrupt
+//   Phi2.2 Sprite logic
+//   Phi2.3 VC/RC logic
+//   Phi2.4 BA logic
+//   Phi2.5 Fetch
+// -----------------------------------------------------------------------------------------------
+
 
 void 
 VIC::beginFrame()
 {
-	lightpenIRQhasOccured = false; // only one event per frame is permitted
-	registerVCBASE = 0;
+    pixelEngine.beginFrame();
+    
+	lightpenIRQhasOccured = false;
+
+    /* "Der [Refresh-]Zähler wird in Rasterzeile 0 mit
+        $ff gelöscht und nach jedem Refresh-Zugriff um 1 verringert.
+        Der VIC greift also in Zeile 0 auf die Adressen $3fff, $3ffe, $3ffd, $3ffc
+        und $3ffb zu, in Zeile 1 auf $3ffa, $3ff9, $3ff8, $3ff7 und $3ff6 usw." [C.B.] */
+    refreshCounter = 0xFF;
+
+    /* "1. Irgendwo einmal auﬂerhalb des Bereiches der Rasterzeilen $30-$f7 (also
+           außerhalb des Bad-Line-Bereiches) wird VCBASE auf Null gesetzt.
+           Vermutlich geschieht dies in Rasterzeile 0, der genaue Zeitpunkt ist
+           nicht zu bestimmen, er spielt aber auch keine Rolle." [C.B.] */
+    registerVCBASE = 0;
+
 }
 
-void 
+void
 VIC::endFrame()
 {
-	// Frame complete. Notify listener...
-	// c64->putMessage(MSG_DRAW, 0, currentScreenBuffer);
-	
-	// Switch frame buffer
-	currentScreenBuffer = (currentScreenBuffer == screenBuffer1) ? screenBuffer2 : screenBuffer1;	
-	pixelBuffer = currentScreenBuffer;
+    pixelEngine.endFrame();
 }
+
 
 void 
 VIC::beginRasterline(uint16_t line)
 {
-	scanline = line;
-		
-	// Clear z buffer. The buffer is initialized with a high, positive value (meaning the pixel is far away)
-	memset(zBuffer, 0x7f, sizeof(zBuffer));
+    verticalFrameFFsetCond = verticalFrameFFclearCond = false;
 
-	// Clear pixel source
-	memset(pixelSource, 0x00, sizeof(pixelSource));		
+    // Determine if we're currently processing a VBLANK line (nothing is drawn in this area)
+    if (isPAL()) {
+        vblank = line < PAL_UPPER_VBLANK || line >= PAL_UPPER_VBLANK + PAL_RASTERLINES;
+    } else {
+        vblank = line < NTSC_UPPER_VBLANK || line >= NTSC_UPPER_VBLANK + NTSC_RASTERLINES;
+    }
+
+    /* OLD CODE
+    if (line != 0) {
+        //assert(yCounter == c64->getRasterline());
+        yCounter = line; // Overflow case is handled in cycle 2
+    }
+    */
+    // Increase yCounter. The overflow case is handled in cycle 2
+    if (!yCounterOverflow())
+        yCounter++;
+    
+    // Check for the DEN bit if we're processing rasterline 30
+    // The initial value can change in the middle of a rasterline.
+    if (line == 0x30)
+        DENwasSetInRasterline30 = DENbit();
+
+    // Check, if we are currently processing a DMA line. The result is stored in variable badLineCondition.
+    // The initial value can change in the middle of a rasterline.
+    updateBadLineCondition();
+    
+    pixelEngine.beginRasterline();
 }
 
 void 
 VIC::endRasterline()
 {
-	// Copy pixel buffer of old line to screen buffer
-	pixelBuffer += totalScreenWidth;
+    // Set vertical flipflop if condition was hit
+    if (verticalFrameFFsetCond) {
+        verticalFrameFF = true;
+    }
+    
+    // Draw debug markers
+    if (markIRQLines && yCounter == rasterInterruptLine())
+        pixelEngine.markLine(PixelEngine::WHITE);
+    if (markDMALines && badLineCondition)
+        pixelEngine.markLine(PixelEngine::RED);
+
+    /*
+    if (yCounter == 52 && !vblank) {
+        pixelEngine.markLine(4);
+    }
+    */
+    
+    pixelEngine.endRasterline();
 }
 
-void 
+bool
+VIC::yCounterOverflow()
+{
+    // PAL machines reset yCounter in cycle 2 in the first physical rasterline
+    // NTSC machines reset yCounter in cycle 2 in the middle of the lower border area
+    return (c64->isPAL() && c64->getRasterline() == 0) || (!c64->isPAL() && c64->getRasterline() == 238);
+}
+
+inline void
+VIC::preparePixelEngine()
+{
+    pixelEngine.dc.yCounter = yCounter;
+    pixelEngine.dc.xCounter = xCounter;
+    pixelEngine.dc.verticalFrameFF = verticalFrameFF;
+    pixelEngine.dc.mainFrameFF = mainFrameFF;
+    pixelEngine.dc.data = g_data;
+    pixelEngine.dc.character = g_character;
+    pixelEngine.dc.color = g_color;
+    pixelEngine.dc.mode = g_mode;
+    pixelEngine.dc.delay = getHorizontalRasterScroll();
+    
+    for (unsigned i = 0; i < 8; i++) {
+        pixelEngine.dc.spriteX[i] = getSpriteX(i);
+    }
+    pixelEngine.dc.spriteXexpand = iomem[0x1D];
+}
+
+void
 VIC::cycle1()
 {
-	// Check, if we are currently processing a DMA line. The result is stored in variable dmaLine.
-	// Be aware that the value of variable dmaLine can change in the middle of a rasterline as a side effect 
-	// of modifying the y scroll offset.
-	checkDmaLineCondition();
-
-	// Trigger rasterline interrupt if applicable
-	// Note: In line 0, the interrupt is triggered in cycle 2
-	if (scanline == rasterInterruptLine() && scanline != 0)
-		triggerIRQ(1);
-			
-	// Determine the value of the DEN bit (in rasterline 0x30 only)
-	if (scanline == 0x30)
-		dmaLinesEnabled = isVisible();
-			
-	// Get sprite data address and sprite data of sprite 3
-	releaseBusForSprite(2);
-	readSpritePtr(3);
-	readSpriteData(3);
+    debug_cycle(1);
+        
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        pAccess(3);
+    else
+        sSecondAccess(3);
+    
+    // Phi2.1 Rasterline interrupt (edge triggered)
+    bool edgeOnYCounter = (c64->getRasterline() != 0);
+    bool edgeOnIrqCond  = (yCounter == rasterInterruptLine() && !yCounterEqualsIrqRasterline);
+    if (edgeOnYCounter && edgeOnIrqCond)
+        triggerIRQ(1);
+    yCounterEqualsIrqRasterline = (yCounter == rasterInterruptLine());
+    
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL())
+        setBAlow(spriteDmaOnOff & (SPR3 | SPR4));
+    else
+        setBAlow(spriteDmaOnOff & (SPR3 | SPR4 | SPR5));
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sFirstAccess(3);
+    else
+        sThirdAccess(3);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void
 VIC::cycle2()
 {
-	// Trigger rasterline interrupt if applicable
-	if (scanline == 0 && scanline == rasterInterruptLine())
-		triggerIRQ(1);
-			
-	readSpriteData(3);
-	readSpriteData(3);
-	requestBusForSprite(5);
-	countX();
-	update_display;
+    debug_cycle(2);
+
+    // Check for yCounter overflows
+    if (yCounterOverflow())
+            yCounter = 0;
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        sSecondAccess(3);
+    else
+        pAccess(4);
+    
+    // Phi2.2 Sprite logic
+    // Phi2.1 Rasterline interrupt (edge triggered)
+    bool edgeOnYCounter = (yCounter == 0);
+    bool edgeOnIrqCond  = (yCounter == rasterInterruptLine() && !yCounterEqualsIrqRasterline);
+    if (edgeOnYCounter && edgeOnIrqCond)
+        triggerIRQ(1);
+
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL())
+        setBAlow(spriteDmaOnOff & (SPR3 | SPR4 | SPR5));
+    else
+        setBAlow(spriteDmaOnOff & (SPR4 | SPR5));
+
+    // Phi2.5 Fetch
+    if (isPAL())
+        sThirdAccess(3);
+    else
+        sFirstAccess(4);
+    
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void 
 VIC::cycle3()
 {
-	releaseBusForSprite(3);
-	readSpritePtr(4);
-	readSpriteData(4);
+    debug_cycle(3);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        pAccess(4);
+    else
+        sSecondAccess(4);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL())
+        setBAlow(spriteDmaOnOff & (SPR4 | SPR5));
+    else
+        setBAlow(spriteDmaOnOff & (SPR4 | SPR5 | SPR6));
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sFirstAccess(4);
+    else
+        sThirdAccess(4);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void 
 VIC::cycle4()
 {
-	readSpriteData(4);
-	readSpriteData(4);
-	requestBusForSprite(6);
-	countX();
-	update_display;
+    debug_cycle(4);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        sSecondAccess(4);
+    else
+        pAccess(5);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL()) {
+        setBAlow(spriteDmaOnOff & (SPR4 | SPR5 | SPR6));
+    } else {
+        setBAlow(spriteDmaOnOff & (SPR5 | SPR6));
+    }
+
+    // Phi2.5 Fetch
+    if (isPAL())
+        sThirdAccess(4);
+    else
+        sFirstAccess(5);
+    
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
 VIC::cycle5()
 {
-	releaseBusForSprite(4);
-	readSpritePtr(5);
-	readSpriteData(5);
-	countX();
-	update_display;
+    debug_cycle(5);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        pAccess(5);
+    else
+        sSecondAccess(5);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL()) {
+        setBAlow(spriteDmaOnOff & (SPR5 | SPR6));
+    } else {
+        setBAlow(spriteDmaOnOff & (SPR5 | SPR6 | SPR7));
+    }
+        
+    // Phi2.5 Fetch
+    if (isPAL())
+        sFirstAccess(5);
+    else
+        sThirdAccess(5);
+    
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void 
 VIC::cycle6()
 {
-	readSpriteData(5);
-	readSpriteData(5);
-	requestBusForSprite(7);
-	countX();
-	update_display;
+    debug_cycle(6);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        sSecondAccess(5);
+    else
+        pAccess(6);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL()) {
+        setBAlow(spriteDmaOnOff & (SPR5 | SPR6 | SPR7));
+    } else {
+        setBAlow(spriteDmaOnOff & (SPR6 | SPR7));
+
+    }
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sThirdAccess(5);
+    else
+        sFirstAccess(6);
+    
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void 
 VIC::cycle7()
 {
-	releaseBusForSprite(5);
-	readSpritePtr(6);
-	readSpriteData(6);
+    debug_cycle(7);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        pAccess(6);
+    else
+        sSecondAccess(6);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(spriteDmaOnOff & (SPR6 | SPR7));
+
+    // Phi2.5 Fetch
+    if (isPAL())
+        sFirstAccess(6);
+    else
+        sThirdAccess(6);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void 
 VIC::cycle8()
 {
-	readSpriteData(6);
-	readSpriteData(6);
-	countX();
-	update_display;
+    debug_cycle(8);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        sSecondAccess(6);
+    else
+        pAccess(7);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL())
+        setBAlow(spriteDmaOnOff & (SPR6 | SPR7));
+    else
+        setBAlow(spriteDmaOnOff & SPR7);
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sThirdAccess(6);
+    else
+        sFirstAccess(7);
+    
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void 
 VIC::cycle9()
 {
-	releaseBusForSprite(6);
-	readSpritePtr(7);
-	readSpriteData(7);
+    debug_cycle(9);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        pAccess(7);
+    else
+        sSecondAccess(7);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(spriteDmaOnOff & SPR7);
+
+    // Phi2.5 Fetch
+    if (isPAL())
+        sFirstAccess(7);
+    else
+        sThirdAccess(7);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void 
 VIC::cycle10()
 {
-	readSpriteData(7);
-	readSpriteData(7);
+    debug_cycle(10);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        sSecondAccess(7);
+    else
+        rIdleAccess();
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL()) {
+        setBAlow(spriteDmaOnOff & SPR7);
+    } else {
+        setBAlow(false);
+    }
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sThirdAccess(7);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void
 VIC::cycle11()
 {
-	releaseBusForSprite(7);
-	countX();
-	update_display;
+    debug_cycle(11);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch (first out of five DRAM refreshs)
+    rAccess();
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(false);
+    
+    // Phi2.5 Fetch
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
 VIC::cycle12()
 {
-	if (dmaLine) {
-		pullDownBA(0x100);
-	}
-	releaseBusForSprite(7);
+    debug_cycle(12);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
 
-	// Reset the X coordinate to 0
-	// xCounter = 0;
-	update_display_and_ba;
+    // Phi1.2 Draw
+    // Phi1.3 Fetch (second out of five DRAM refreshs)
+    rAccess();
+
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+
+    /* "3. Liegt in den Zyklen 12-54 ein Bad-Line-Zustand vor, wird BA auf Low
+        gelegt und die c-Zugriffe gestartet. Einmal gestartet, findet in der
+        zweiten Phase jedes Taktzyklus im Bereich 15-54 ein c-Zugriff statt. Die
+        gelesenen Daten werden in der Videomatrix-/Farbzeile an der durch VMLI
+        angegebenen Position abgelegt. Bei jedem g-Zugriff im Display-Zustand
+        werden diese Daten ebenfalls an der durch VMLI spezifizierten Position
+        wieder intern gelesen." [C.B.] */
+    
+    setBAlow(badLineCondition);
+    
+    // Phi2.5 Fetch
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
-VIC::cycle13()
+VIC::cycle13() // X Coordinate -3 - 4 (?)
 {
-	countX();
-	update_display_and_ba;
-	
-	// FRODO: raster_x = 0xfffc;
+    debug_cycle(13);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    xCounter = -4;
+    preparePixelEngine(); // Prepare for next cycle (first border column)
+    // Update pixelEngines color registers to get the first pixel right
+    pixelEngine.updateColorRegisters();
+    pixelEngine.updateBorderColorRegister();
+
+    // Phi1.3 Fetch (third out of five DRAM refreshs)
+    rAccess();
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(badLineCondition);
+
+    // Phi2.5 Fetch
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
-VIC::cycle14()
+VIC::cycle14() // SpriteX: 0 - 7 (?)
 {
-	// NEW CODE
-	xCounter = 0x04;
-	
-	/* In der ersten Phase von Zyklus 14 jeder Zeile wird VC mit VCBASE geladen
-	 (VCBASE->VC) und VMLI gelöscht. Wenn zu diesem Zeitpunkt ein
-	 Bad-Line-Zustand vorliegt, wird zusätzlich RC auf Null gesetzt. */
-	registerVC = registerVCBASE;
+    debug_cycle(14);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle (first border column)
+    preparePixelEngine(); // Prepare for next cycle (border column 2)
+
+    // Phi1.3 Fetch (forth out of five DRAM refreshs)
+    rAccess();
+
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    
+	// "2. In der ersten Phase von Zyklus 14 jeder Zeile wird VC mit VCBASE geladen
+    //     (VCBASE->VC) und VMLI gelöscht. Wenn zu diesem Zeitpunkt ein
+    //     Bad-Line-Zustand vorliegt, wird zusätzlich RC auf Null gesetzt." [C.B.]
+
+    registerVC = registerVCBASE;
 	registerVMLI = 0;
-	if (dmaLine) 
+	if (badLineCondition)
 		registerRC = 0;
-	countX();
-	update_display_and_ba;
+
+    // Phi2.4 BA logic
+    setBAlow(badLineCondition);
+
+    // Phi2.5 Fetch
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
-VIC::cycle15()
+VIC::cycle15() // SpriteX: 8 - 15 (?)
 {
-	/* In der ersten Phase von Zyklus 15 wird geprüft, ob das
-	 Expansions-Flipflop gesetzt ist. Wenn ja, wird MCBASE um 2 erhöht. */
-	// Note: Done in cycle 16
+    debug_cycle(15);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle (border column 2)
+    preparePixelEngine(); // Prepare for next cycle (border column 3)
+    
+    // Phi1.3 Fetch (last DRAM refresh)
+    rAccess();
 
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(badLineCondition);
+
+    // Phi2.5 Fetch
 	cAccess();
-	countX();
-	update_display_and_ba;
+
+    // Finalize
+    cleared_bits_in_d017 = 0;
+    updateDisplayState();
+    countX();
 }
 
 void
-VIC::cycle16()
+VIC::cycle16() // SpriteX: 16 - 23 (?)
 {
-	if (isCSEL()) mainFrameFF = false;		
-			
-	/* 8. In der ersten Phase von Zyklus 16 wird geprüft, ob das
-	 Expansions-Flipflop gesetzt ist. Wenn ja, wird MCBASE um 1 erhöht.
-	 Dann wird geprüft, ob MCBASE auf 63 steht und bei positivem Vergleich
-	 der DMA und die Darstellung für das jeweilige Sprite abgeschaltet. */
-			
-	for (int i = 0; i < 8; i++) {
-		uint8_t mask = (1 << i);
-		if (expansionFF & mask) {
-			mcbase[i] += 3;
-			mcbase[i] &= 0x3F; // 6 bit counter
-		}
-		if (mcbase[i] == 63) {			
-			// spriteOnOff &= ~mask;
-			spriteDmaOnOff &= ~mask;
-		}
-	}		
-	gAccess();
-	cAccess();
+    debug_cycle(16);
+
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle (border column 3)
+    preparePixelEngine(); // Prepare for next cycle (border column 4)
+    
+    // Phi1.3 Fetch
+    gAccess();
+
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    turnSpriteDmaOff();
+    
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(badLineCondition);
+
+    // Phi2.5 Fetch
+    cAccess();
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display_and_ba;
 }
 
 void
-VIC::cycle17()
+VIC::cycle17() // SpriteX: 24 - 31 (?)
 {
-	gAccess();
-	cAccess();
+    debug_cycle(17);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    checkFrameFlipflopsLeft(24);
+    
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle (border column 4)
+    preparePixelEngine(); // Prepare for next cycle (first canvas column)
+    
+    // Phi1.3 Fetch
+    gAccess();
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(badLineCondition);
+
+    // Phi2.5 Fetch
+    cAccess();
+
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display_and_ba;
 }
 
 void
-VIC::cycle18()
+VIC::cycle18() // SpriteX: 32 - 39
 {
-	if (!isCSEL()) mainFrameFF = false;
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
+    debug_cycle(18);
+
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    checkFrameFlipflopsLeft(31);
+    
+    // Phi1.2 Draw
+    pixelEngine.draw17(); // Draw previous cycle (first canvas column)
+    preparePixelEngine(); // Prepare for next cycle (canvas column 2)
+
+    // Phi1.3 Fetch
+    gAccess();
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(badLineCondition);
+
+    // Phi2.5 Fetch
+    cAccess();
+
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
-VIC::cycle19()
+VIC::cycle19to54()
 {
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
+    debug_cycle(19);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
 
-void
-VIC::cycle20()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle
+    preparePixelEngine(); // Prepare for next cycle
+    
+    // Phi1.3 Fetch
+    gAccess();
 
-void
-VIC::cycle21()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(badLineCondition);
 
-void
-VIC::cycle22()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle23()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle24()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle25()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle26()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle27()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle28()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle29()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle30()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle31()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle32()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle33()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle34()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle35()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle36()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle37()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle38()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle39()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle40()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle41()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle42()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle43()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle44()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle45()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle46()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle47()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle48()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle49()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle50()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle51()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle52()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle53()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
-}
-
-void
-VIC::cycle54()
-{
-	gAccess();
-	cAccess();
-	countX();
-	update_display_and_ba;
+    // Phi2.5 Fetch
+    cAccess();
+    
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
 VIC::cycle55()
 {
-	if (!isCSEL()) mainFrameFF = true;
-	
-	gAccess();
-	
-	/* In der ersten Phase von Zyklus 55 wird das Expansions-Flipflop
-	 invertiert, wenn das MxYE-Bit gesetzt ist. */
-	expansionFF ^= iomem[0x17];
-			
-	releaseBA(0x100);
+    debug_cycle(55);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
 
-	/* In den ersten Phasen von Zyklus 55 und 56 wird für jedes Sprite geprüft,
-	 ob das entsprechende MxE-Bit in Register $d015 gesetzt und die
-	 Y-Koordinate des Sprites (ungerade Register $d001-$d00f) gleich den
-	 unteren 8 Bits von RASTER ist. Ist dies der Fall und der DMA für das
-	 Sprite noch ausgeschaltet, wird der DMA angeschaltet, MCBASE gelöscht
-	 und, wenn das MxYE-Bit gesetzt ist, das Expansions-Flipflop gelöscht.
-	 */
-	updateSpriteDmaOnOff();
-	requestBusForSprite(0);
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle (canvas column)
+    preparePixelEngine(); // Prepare for next cycle (canvas column)
+    
+    // Phi1.3 Fetch
+    gAccess();
+
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+	turnSpriteDmaOn();
+
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL()) {
+        setBAlow(spriteDmaOnOff & SPR0);
+    } else {
+        setBAlow(false);
+    }
+    
+    // Phi2.5 Fetch
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void
 VIC::cycle56()
 {
-	updateSpriteDmaOnOff();
-	requestBusForSprite(0);
-	countX();
-	update_display;
+    debug_cycle(56);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    checkFrameFlipflopsRight(335);
+
+    // Phi1.2 Draw
+    pixelEngine.draw55(); // Draw previous cycle (canvas column)
+    preparePixelEngine(); // Prepare for next cycle (last canvas column)
+    
+    // Phi1.3 Fetch
+    rIdleAccess();
+    g_data = 0; // no more gAccesses from now on (TODO: BETTER MOVE TO rIdleAccess(?))
+
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    turnSpriteDmaOn();
+    toggleExpansionFlipflop();
+    
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(spriteDmaOnOff & SPR0);
+    
+    // Phi2.5 Fetch
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
 VIC::cycle57()
 {
-	if (isCSEL()) mainFrameFF = true;
-	drawHorizontalFrame = mainFrameFF;
-	requestBusForSprite(1);
-	countX();
-	update_display;
+    debug_cycle(57);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    checkFrameFlipflopsRight(344);
+    
+    // Phi1.2 Draw (border starts here)
+    pixelEngine.draw(); // Draw previous cycle (last canvas column)
+    preparePixelEngine(); // Prepare for next cycle (first column of right border)
+    
+    // Phi1.3 Fetch
+    rIdleAccess();
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL()) {
+        setBAlow(spriteDmaOnOff & (SPR0 | SPR1));
+    } else {
+        setBAlow(spriteDmaOnOff & SPR0);
+    }
+    
+    // Phi2.5 Fetch
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
 VIC::cycle58()
 {
-	/* Der Übergang vom Display- in den Idle-Zustand erfolgt in Zyklus 58 einer Zeile, 
-	 wenn der RC den Wert 7 hat und kein Bad-Line-Zustand vorliegt.
-	 In der ersten Phase von Zyklus 58 wird geprüft, ob RC=7 ist. Wenn ja,
-	 geht die Videologik in den Idle-Zustand und VCBASE wird mit VC geladen
-	 (VC->VCBASE). Ist die Videologik danach im Display-Zustand (liegt ein
-	 Bad-Line-Zustand vor, ist dies immer der Fall), wird RC erhöht. */
-	if (displayState && registerRC == 7 && !dmaLine) {
-		displayState = false;	
-		registerVCBASE = registerVC;	
-	}
-	if (displayState) {
-		registerRC++;
-		registerRC &= 7;  // 3 bit overflow
-	}
+    debug_cycle(58);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle (first column of right border)
+    preparePixelEngine(); // Prepare for next cycle (column 2 of right border)
+    
+    // Phi1.3 Fetch
+    if (isPAL())
+        pAccess(0);
+    else
+        rIdleAccess();
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    turnSpriteDisplayOn();
+
+    // Old line based sprite drawing routine (DEPRECATED)
+	// pixelEngine.drawAllSprites();
 			
-	/* In der ersten Phase von Zyklus 58 wird für jedes Sprite MC mit MCBASE
-	 geladen (MCBASE->MC) und geprüft, ob der DMA für das Sprite angeschaltet
-	 und die Y-Koordinate des Sprites gleich den unteren 8 Bits von RASTER
-	 ist. Ist dies der Fall, wird die Darstellung des Sprites angeschaltet. */
-	oldSpriteOnOff = spriteOnOff; // remember last value
-	for (int i = 0; i < 8; i++) {
-		mc[i] = mcbase[i];
-		uint8_t mask = (1 << i);
-		if (spriteDmaOnOff & mask) {
-			uint8_t y = getSpriteY(i);
-			if (y == (scanline & 0xff)) 
-				spriteOnOff |= mask;
-		}
-	}
-		
-	/* Draw rasterline into pixel buffer */
-	drawAllSprites();
-			
-	// switch off sprites if dma is off
-	for (int i = 0; i < 8; i++) {
-		uint8_t mask = (1 << i);
-		if ((spriteOnOff & mask) && !(spriteDmaOnOff & mask))
-			spriteOnOff &= ~mask;
-	}
-			
-	readSpritePtr(0);
-	readSpriteData(0);
+    turnSpriteDisplayOff();
+    
+    // Phi2.3 VC/RC logic
+    
+    // "5. In der ersten Phase von Zyklus 58 wird geprüft, ob RC=7 ist. Wenn ja,
+    //     geht die Videologik in den Idle-Zustand und VCBASE wird mit VC geladen
+    //     (VC->VCBASE)." [C.B.]
+
+    // "Der Übergang vom Display- in den Idle-Zustand erfolgt in Zyklus 58 einer Zeile,
+    //  wenn der RC den Wert 7 hat und kein Bad-Line-Zustand vorliegt."
+    
+    
+    if (registerRC == 7) {
+        registerVCBASE = registerVC;
+        if (!badLineCondition)
+            displayState = false;
+    }
+
+    updateDisplayState();
+    
+    if (displayState) {
+        // 3 bit overflow register
+        registerRC = (registerRC + 1) & 0x07;
+    }
+    
+    // Phi2.4 BA logic
+    setBAlow(spriteDmaOnOff & (SPR0 | SPR1));
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sFirstAccess(0);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
 }
 
 void
 VIC::cycle59()
 {
-	readSpriteData(0);
-	readSpriteData(0);
-	requestBusForSprite(2);
+    debug_cycle(59);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle (column 2 of right border)
+    preparePixelEngine(); // Prepare for next cycle (column 3 of right border)
+    
+    // Phi1.3 Fetch
+    if (isPAL())
+        sSecondAccess(0);
+    else
+        pAccess(0);
+ 
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL())
+        setBAlow(spriteDmaOnOff & (SPR0 | SPR1 | SPR2));
+    else
+        setBAlow(spriteDmaOnOff & (SPR0 | SPR1));
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sThirdAccess(0);
+    else
+        sFirstAccess(0);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void
 VIC::cycle60()
 {
-	releaseBusForSprite(0);
-	readSpritePtr(1);
-	readSpriteData(1);
-	countX();
-	update_display;
+    debug_cycle(60);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw (last visible cycle)
+    pixelEngine.draw(); // Draw previous cycle (column 3 of right border)
+    preparePixelEngine(); // Prepare for next cycle (last column of right border)
+    
+    // Phi1.3 Fetch
+    if (isPAL())
+        pAccess(1);
+    else
+        sSecondAccess(0);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL())
+        setBAlow(spriteDmaOnOff & (SPR1 | SPR2));
+    else
+        setBAlow(spriteDmaOnOff & (SPR0 | SPR1 | SPR2));
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sFirstAccess(1);
+    else
+        sThirdAccess(0);
+    
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
 VIC::cycle61()
 {
-	readSpriteData(1);
-	readSpriteData(1);
-	requestBusForSprite(3);
+    debug_cycle(61);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    pixelEngine.draw(); // Draw previous cycle (last column of right border)
+    
+    // Phi1.3 Fetch
+    if (isPAL())
+        sSecondAccess(1);
+    else
+        pAccess(1);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL())
+        setBAlow(spriteDmaOnOff & (SPR1 | SPR2 | SPR3));
+    else
+        setBAlow(spriteDmaOnOff & (SPR1 | SPR2));
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sThirdAccess(1);
+    else
+        sFirstAccess(1);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void
 VIC::cycle62()
 {
-	releaseBusForSprite(1);
-	readSpritePtr(2);
-	readSpriteData(2);
+    debug_cycle(62);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        pAccess(2);
+    else
+        sSecondAccess(1);
+
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL())
+        setBAlow(spriteDmaOnOff & (SPR2 | SPR3));
+    else
+        setBAlow(spriteDmaOnOff & (SPR1 | SPR2 | SPR3));
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sFirstAccess(2);
+    else
+        sThirdAccess(1);
+    
+    // Finalize
+    updateDisplayState();
 	countX();
-	update_display;
 }
 
 void
 VIC::cycle63()
-{			
-	// update border flipflops
-	if (scanline == 51 && isRSEL() && isVisible()) 
-		drawVerticalFrame = verticalFrameFF = false;
-	else if (scanline == 55 && !isRSEL() && isVisible()) 
-		drawVerticalFrame = verticalFrameFF = false;
-	else if (scanline == 247 && !isRSEL()) 
-		drawVerticalFrame = verticalFrameFF = true;
-	else if (scanline == 251 && isRSEL()) 
-		drawVerticalFrame = verticalFrameFF = true;
-			
-	// draw border
-	drawBorder();
-			
-	// illegal display modes cause a black line to appear
-	if (getDisplayMode() > EXTENDED_BACKGROUND_COLOR) markLine(xStart(), SCREEN_WIDTH, colors[BLACK]);
-
-	// draw debug markers
-	if (markIRQLines && scanline == rasterInterruptLine()) 
-		markLine(0, totalScreenWidth, colors[WHITE]);
-	if (markDMALines && dmaLine)	
-		markLine(0, totalScreenWidth, colors[RED]);
-	if (rasterlineDebug[scanline] >= 0) {
-		markLine(0, totalScreenWidth, colors[rasterlineDebug[scanline] % 16]);
-		rasterlineDebug[scanline] = -1;
-	}		
-
-	readSpriteData(2);
-	readSpriteData(2);
-	requestBusForSprite(4);
-	countX();
-	update_display;
+{
+    debug_cycle(63);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    yCounterEqualsIrqRasterline = (yCounter == rasterInterruptLine());
+        
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    if (isPAL())
+        sSecondAccess(2);
+    else
+        pAccess(2);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    if (isPAL()) {
+        setBAlow(spriteDmaOnOff & (SPR2 | SPR3 | SPR4));
+    } else {
+        setBAlow(spriteDmaOnOff & (SPR2 | SPR3));        
+    }
+    
+    // Phi2.5 Fetch
+    if (isPAL())
+        sThirdAccess(2);
+    else
+        sFirstAccess(2);
+    
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
 void
-VIC::cycle64()
+VIC::cycle64() 	// NTSC only
 {
-	// NTSC only
-	countX();
+    debug_cycle(64);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    sSecondAccess(2);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(spriteDmaOnOff & (SPR2 | SPR3 | SPR4));
+
+     // Phi2.5 Fetch
+    sThirdAccess(2);
+    
+    // Finalize
+	updateDisplayState();
+    countX();
 }
 
 void
-VIC::cycle65()
+VIC::cycle65() 	// NTSC only
 {
-	// NTSC only
-	countX();
+    debug_cycle(65);
+    
+    // Phi1.1 Frame logic
+    checkVerticalFrameFF();
+    yCounterEqualsIrqRasterline = (yCounter == rasterInterruptLine());
+
+    // Phi1.2 Draw
+    // Phi1.3 Fetch
+    pAccess(3);
+    
+    // Phi2.1 Rasterline interrupt
+    // Phi2.2 Sprite logic
+    // Phi2.3 VC/RC logic
+    // Phi2.4 BA logic
+    setBAlow(spriteDmaOnOff & (SPR3 | SPR4));
+
+    // Phi2.5 Fetch
+    sFirstAccess(3);
+
+    // Finalize
+    updateDisplayState();
+    countX();
 }
 
-
-// -----------------------------------------------------------------------------------------------
-//                                              Debugging
-// -----------------------------------------------------------------------------------------------
-
-void inline
-VIC::markLine(int start, unsigned length, int color)
+void
+VIC::debug_cycle(unsigned c)
 {
-	for (unsigned i = 0; i < length; i++) {
-		pixelBuffer[start + i] = color;
-	}	
+/*
+    static cycle = 0;
+    cycle = (c == 19) ? (cycle+1) : c;
+*/
+
+/*
+     if (dirktrace == 1 && yCounter == DIRK_DEBUG_LINE) {
+     printf("(%i,%i) (dx,yd):(%d,%d) D020:%d D021:%d BAlow:%d RDY:%d RC:%d VC:%d (VCbase:%d) VMLI:%d bad_line:%d disp_state:%d\n",
+     yCounter, c64->rasterCycle,
+     getHorizontalRasterScroll(), getVerticalRasterScroll(),
+     iomem[0x20], iomem[0x21],
+     BAlow, cpu->getRDY(),
+     registerRC, registerVC, registerVCBASE, registerVMLI, badLineCondition, displayState);
+     dirkcnt++;
+     }
+*/
 }
 

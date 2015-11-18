@@ -20,11 +20,18 @@
 
 VC1541Memory::VC1541Memory()
 {
-	debug(2, "  Creating VC1541 memory at %p...\n", this);	
+    name = "1541MEM";
+	debug(2, "  Creating VC1541 memory at %p...\n", this);
 
-	name = "1541MEM";
-	iec = NULL;
-	floppy = NULL;
+    // Register snapshot items
+    SnapshotItem items[] = {
+
+    { mem,              0xC000,     CLEAR_ON_RESET },
+    { &mem[0xA000],     0x4000,     KEEP_ON_RESET  }, /* VC1541 Rom */
+    { NULL,             0,          0 }};
+
+    registerSnapshotItems(items, sizeof(items));
+
 	romFile = NULL;
 }
 
@@ -36,29 +43,12 @@ VC1541Memory::~VC1541Memory()
 void 
 VC1541Memory::reset()
 {
-	debug (2, "    Resetting VC1541 memory...\n");
-
-	// Zero out RAM...
-	for (unsigned i = 0; i < 0xC000; i++)
-		mem[i] = 0;	
-}	
-
-void 
-VC1541Memory::loadFromBuffer(uint8_t **buffer)
-{
-	debug(2, "    Loading VC1541 memory state...\n");
-
-	for (unsigned i = 0; i < 0xC000; i++)
-		mem[i] = read8(buffer);	
-}
-
-void 
-VC1541Memory::saveToBuffer(uint8_t **buffer)
-{
-	debug(2, "    Saving VC1541 memory state...\n");
-
-	for (unsigned i = 0; i < 0xC000; i++)
-		write8(buffer, mem[i]);
+    VirtualComponent::reset();
+    
+    // Establish bindings
+    cpu = c64->cpu;
+    iec = c64->iec;
+    floppy = c64->floppy;    
 }
 
 bool 
@@ -137,9 +127,9 @@ uint8_t
 VC1541Memory::peekIO(uint16_t addr)
 {	
 	if ((addr & 0xFC00) == 0x1800) {
-		return floppy->via1->peek(addr & 0x000F);
+		return floppy->via1.peek(addr & 0x000F);
 	} else if ((addr & 0xFC00) == 0x1c00) {
-		return floppy->via2->peek(addr & 0x000F);
+		return floppy->via2.peek(addr & 0x000F);
 	} else {
 		// Return high byte of addr 
 		// VICE and Frodo are doing it that way
@@ -155,8 +145,8 @@ VC1541Memory::peek(uint16_t addr)
 	if (addr >= 0xc000) { 
 		// ROM
 		result = mem[addr];
-	} else if (addr < 0x1000) { 
-		// RAM (repeats multiply times, hence we apply a bitmask)
+	} else if (addr < 0x1000) { // TODO: Check if 0x1000 is the correct value
+		// RAM (bitmask is applied because RAM repeats multiple times)
 		result = mem[addr & 0x07ff]; 		
 	} else { 
 		// IO space
@@ -182,9 +172,9 @@ void
 VC1541Memory::pokeIO(uint16_t addr, uint8_t value)
 {	
 	if ((addr & 0xFC00) == 0x1800) {
-		floppy->via1->poke(addr & 0x000F, value);
+		floppy->via1.poke(addr & 0x000F, value);
 	} else if ((addr & 0xFC00) == 0x1c00) {
-		floppy->via2->poke(addr & 0X000F, value);
+		floppy->via2.poke(addr & 0X000F, value);
 	} else {
 		// No memory here, nothing happens
 	}

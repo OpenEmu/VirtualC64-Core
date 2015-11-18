@@ -32,6 +32,8 @@ T64Archive::~T64Archive()
 bool 
 T64Archive::isT64File(const char *filename)
 {
+    /* "Anmerkung: Der String muß nicht wortwörtlich so vorhanden sein. Man sollte nach den Substrings "C64" und "tape" suchen. Vorsicht: TAP Images verwenden den String: C64-TAPE-RAW der ebenfalls die Substrings "C64" und "TAPE" enthält." [Power64 doc] 
+        TODO: Make sure that the archive is not a TAP file. */
 	int magic_bytes[] = { 0x43, 0x36, 0x34, EOF };
 	
 	assert(filename != NULL);
@@ -49,25 +51,137 @@ T64Archive::isT64File(const char *filename)
 }
 
 T64Archive *
-T64Archive::archiveFromFile(const char *filename)
+T64Archive::archiveFromT64File(const char *filename)
 {
 	T64Archive *archive;
 	
 	fprintf(stderr, "Loading T64 archive from T64 file...\n");
 	archive = new T64Archive();	
 	if (!archive->readFromFile(filename)) {
+        fprintf(stderr, "Failed to load archive\n");
 		delete archive;
 		archive = NULL;
 	}
 	
-	fprintf(stderr, "T64 archive loaded successfully.\n");
 	return archive;
 }
 
-const char *
-T64Archive::getTypeOfContainer() 
+T64Archive *
+T64Archive::archiveFromArchive(Archive *otherArchive)
 {
-	return "T64";
+    T64Archive *archive;
+    
+    if (otherArchive == NULL)
+        return NULL;
+    
+    fprintf(stderr, "Creating T64 archive from %s archive...\n", otherArchive->getTypeAsString());
+    
+    if ((archive = new T64Archive()) == NULL) {
+        fprintf(stderr, "Failed to create archive\n");
+        return NULL;
+    }
+    
+    // Determine container size and allocate memory
+    unsigned currentFiles = otherArchive->getNumberOfItems();
+    unsigned maxFiles = (currentFiles < 30) ? 30 : currentFiles;
+    archive->size = 64 /* header */ + maxFiles * 32 /* tape entries */;
+    
+    for (unsigned i = 0; i < otherArchive->getNumberOfItems(); i++)
+        archive->size += otherArchive->getSizeOfItem(i);
+    
+    if ((archive->data = (uint8_t *)malloc(archive->size)) == NULL) {
+        fprintf(stderr, "Failed to allocate %d bytes of memory\n", archive->size);
+        delete archive;
+        return NULL;
+    }
+    
+    // Magic bytes (32 bytes)
+    uint8_t *ptr = archive->data;
+    strncpy((char *)ptr, "C64 tape image file", 32);
+    ptr += 32;
+    
+    // Version (2 bytes)
+    *ptr++ = 0x00;
+    *ptr++ = 0x01;
+    
+    // Max files (2 bytes)
+    *ptr++ = LO_BYTE(maxFiles);
+    *ptr++ = HI_BYTE(maxFiles);
+
+    // Current files (2 bytes)
+    *ptr++ = LO_BYTE(currentFiles);
+    *ptr++ = HI_BYTE(currentFiles);
+
+    // Reserved (2 bytes)
+    *ptr++ = 0x00;
+    *ptr++ = 0x00;
+    
+    // User description (24 bytes)
+    strncpy((char *)ptr, (char *)otherArchive->getName(), 24);
+    for (unsigned i = 0; i < 24; i++, ptr++)
+        *ptr = ascii2pet(*ptr);
+    
+    // Tape entries
+    uint32_t tapePosition = 64 + maxFiles * 32; // data of item 0 starts here
+    memset(ptr, 0, 32 * maxFiles);
+    for (unsigned n = 0; n < maxFiles; n++) {
+
+        if (n >= currentFiles) {
+            // Empty tape slot
+            ptr += 32;
+            continue;
+        }
+        
+        // Entry used (1 byte)
+        *ptr++ = 0x01;
+        
+        // File type (1 byte)
+        *ptr++ = 0x82;
+        
+        // Start address (2 bytes)
+        uint16_t startAddr = otherArchive->getDestinationAddrOfItem(n);
+        *ptr++ = LO_BYTE(startAddr);
+        *ptr++ = HI_BYTE(startAddr);
+            
+        // Start address (2 bytes)
+        uint16_t endAddr = startAddr + otherArchive->getSizeOfItem(n);
+        *ptr++ = LO_BYTE(endAddr);
+        *ptr++ = HI_BYTE(endAddr);
+        
+        // Reserved (2 bytes)
+        ptr += 2;
+            
+        // Tape position (4 bytes)
+        *ptr++ = LO_BYTE(tapePosition);
+        *ptr++ = LO_BYTE(tapePosition >> 8);
+        *ptr++ = LO_BYTE(tapePosition >> 16);
+        *ptr++ = LO_BYTE(tapePosition >> 24);
+        tapePosition += otherArchive->getSizeOfItem(n);
+            
+        // Reserved (4 bytes)
+        ptr += 4;
+            
+        // File name (16 bytes)
+        strncpy((char *)ptr, (char *)otherArchive->getNameOfItem(n), 16);
+        for (unsigned i = 0; i < 16; i++, ptr++)
+            *ptr = ascii2pet(*ptr);
+    }
+    
+    // File data
+    for (unsigned n = 0; n < currentFiles; n++) {
+
+        int byte;
+        otherArchive->selectItem(n);
+        while ((byte = otherArchive->getByte()) != EOF) {
+            *ptr++ = (uint8_t)byte;
+        }
+        
+    }
+    
+    otherArchive->dumpDirectory();
+    archive->dumpDirectory();
+    
+    return archive;
 }
 
 void T64Archive::dealloc()
@@ -86,7 +200,7 @@ T64Archive::fileIsValid(const char *filename)
 }
 
 bool 
-T64Archive::readFromBuffer(const void *buffer, unsigned length)
+T64Archive::readFromBuffer(const uint8_t *buffer, unsigned length)
 {	
 	if ((data = (uint8_t *)malloc(length)) == NULL)
 		return false;
@@ -96,6 +210,18 @@ T64Archive::readFromBuffer(const void *buffer, unsigned length)
 
 	return true;
 }
+
+unsigned
+T64Archive::writeToBuffer(uint8_t *buffer)
+{
+    assert(data != NULL);
+    
+    if (buffer) {
+        memcpy(buffer, data, size);
+    }
+    return size;
+}
+
 
 const char *
 T64Archive::getName()
@@ -120,7 +246,7 @@ T64Archive::directoryItemIsPresent(int n)
 	int i;
 	
 	// check for zeros...
-	if (size >= last)
+	if (last < size)
 		for (i = first; i < last; i++)
 			if (data[i] != 0)
 				return true;
@@ -134,16 +260,17 @@ T64Archive::getNumberOfItems()
 	int noOfItems;
 
 	// Get number of files from the file header...
-	noOfItems = ((int)data[0x25] << 8) + data[0x24];
+    noOfItems = LO_HI(data[0x24], data[0x25]);
 
 	if (noOfItems == 0) {
-		// Note: Some archives don't store this value properly.
+
+        // Note: Some archives don't store this value properly.
 		// In this case, we can determine the number of files
 		// by iterating through the directory area...
 		while (directoryItemIsPresent(noOfItems))
 			noOfItems++;
 	}
-	
+
 	return noOfItems;
 }
 
@@ -165,22 +292,6 @@ T64Archive::getNameOfItem(int n)
 	}
 	return name;
 }
-	
-int 
-T64Archive::getSizeOfItem(int n)
-{
-	int i = 0x42 + (n * 0x20);
-	uint16_t startAddrInMemory = data[i] + (data[i+1] << 8);
-
-	int j = 0x44 + (n * 0x20);
-	uint16_t endAddrInMemory = data[j] + (data[j+1] << 8);
-
-	if (endAddrInMemory == 0xC3C6) {
-		fprintf(stderr, "WARNING: Corrupted archive. Mostly likely created with CONV64!\n");
-		// WHAT DO WE DO ABOUT IT?
-	}
-	return (endAddrInMemory - startAddrInMemory) + 1;
-}
 
 const char *
 T64Archive::getTypeOfItem(int n)
@@ -197,23 +308,51 @@ uint16_t
 T64Archive::getDestinationAddrOfItem(int n)
 {
 	int i = 0x42 + (n * 0x20);
-	uint16_t result = data[i] + (data[i+1] << 8);
+	uint16_t result = LO_HI(data[i], data[i+1]);
 	return result;
 }
 
 void 
 T64Archive::selectItem(int n)
 {
-	int i;
-	
-	// compute start address in container
-	i = 0x48 + (n * 0x20);
-	fp = data[i] + (data[i+1] << 8) + (data[i+2] << 16) + (data[i+2] << 24);
-	fp_eof = fp + getSizeOfItem(n); // largest offset, that belongs to the file
+	unsigned i;
+    
+    if (n < getNumberOfItems()) {
 
-	if (fp >= size)
-		fp = fp_eof = -1;
-		
+        // Compute start address in container
+        i = 0x48 + (n * 0x20);
+        if ((fp = LO_LO_HI_HI(data[i], data[i+1], data[i+2], data[i+3])) >= size)
+            fprintf(stderr, "PANIC! fp is out of bounds!\n");
+
+        // Compute start address in memory
+        i = 0x42 + (n * 0x20);
+        uint16_t startAddrInMemory = LO_HI(data[i], data[i+1]);
+        
+        // Compute end address in memory
+        i = 0x44 + (n * 0x20);
+        uint16_t endAddrInMemory = LO_HI(data[i], data[i+1]);
+
+        if (endAddrInMemory == 0xC3C6) {
+            fprintf(stderr, "WARNING: Corrupted archive. Mostly likely created with CONV64!\n");
+            // WHAT DO WE DO ABOUT IT?
+        }
+
+        // Compute size of item
+        uint16_t length = endAddrInMemory - startAddrInMemory;
+
+        // fprintf(stderr, "start = %d end = %d diff = %d\n", startAddrInMemory, endAddrInMemory, length);
+        // fprintf(stderr, "fp = %d fp_eof = %d\n", fp, fp_eof);
+
+        // Store largest offset that belongs to the file
+        if ((fp_eof = fp + length) > size)
+            fprintf(stderr, "PANIC! fp_eof is out of bounds!\n");
+        
+        // Return if offset values are safe
+        if (fp < size && fp_eof <= size)
+            return; // success
+    }
+
+    fp = fp_eof = -1; // fail
 	return;
 }
 
@@ -226,16 +365,25 @@ T64Archive::getByte()
 		return -1;
 		
 	// get byte
-	result = data[fp];
+	result = data[fp++];
 	
 	// check for end of file
-	if (fp == fp_eof || fp == (size-1)) {
+	if (fp == fp_eof || fp == size)
 		fp = -1;
-	} else {
-		// advance file pointer
-		fp++;
-	}
 
 	// fprintf(stderr, "%02X ", result);
 	return result;
 }
+
+#if 0
+void
+T64Archive::dumpDirectory()
+{
+    Archive::dumpDirectory();
+    
+    for (unsigned i = 0; i < getNumberOfItems(); i++) {
+        fprintf(stderr, "  Item %2d:      %s (%d bytes, load address: %d)\n",
+                i, getNameOfItem(i), getSizeOfItem(i), getDestinationAddrOfItem(i));
+    }
+}
+#endif

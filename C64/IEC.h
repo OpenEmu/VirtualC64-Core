@@ -1,5 +1,5 @@
 /*
- * (C) 2006 Dirk W. Hoffmann. All rights reserved.
+ * (C) 2006 - 2015 Dirk W. Hoffmann. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,7 +46,7 @@ class IEC : public VirtualComponent {
 
 public:
 	
-	//! Reference to the virtual disc drive
+	//! Reference to the virtual disk drive
 	VC1541 *drive;
 
 private:
@@ -90,9 +90,6 @@ private:
 	//! True, iff the device clock pin is configured as output
 	bool deviceClockIsOutput;
 	
-	//! Current value of the atn pin of the connected external device (should be constantly 1)
-	// bool deviceAtnPin;
-
 	//! Current value of the data pin of the connected CIA chip
 	bool ciaDataPin;
 	
@@ -112,7 +109,7 @@ private:
 	bool ciaAtnIsOutput;
 
 	//! Used to determine if the bus is idle or if data is transferred 
-	int busActivity;
+	uint32_t busActivity;
 	
 	//! Update IEC bus lines depending on the CIA and device pins
 	bool _updateIecLines(bool *atnedge = NULL);
@@ -128,11 +125,8 @@ public:
 	//! Bring the component back to its initial state
 	void reset();
 
-	//! Load state
-	void loadFromBuffer(uint8_t **buffer);
-	
-	//! Save state
-	void saveToBuffer(uint8_t **buffer);	
+    //! Dump current configuration into message queue
+    void ping();
 	
 	//! Dump internal state to console
 	void dumpState();
@@ -183,6 +177,62 @@ public:
 			
 	//! Is invoked periodically by the run thread
 	void execute();
+    
+    // -------------------------------------------------------------------
+    //                     Frodo-style fast loader
+    // -------------------------------------------------------------------
+   
+private:
+    
+    //! Indicates if the simulated drive is currently listening
+    bool listening;
+
+    //! Indicates if the simulated drive is currently talking
+    bool talking;
+
+    //! Secondary address
+    uint8_t secondary;
+
+    //! Received command
+    uint8_t command;
+    
+    //! Filename storage
+    char filename[17]; 
+
+public:
+    
+    enum {
+        IEC_OK = 0x00,
+        IEC_READ_TIMEOUT = 0x02,    // Timeout on reading
+        IEC_TIMEOUT = 0x03,         // Timeout
+        IEC_EOF = 0x40,             // End of file
+        IEC_NOTPRESENT = 0x80       // Device not present
+    };
+    
+    enum {
+        IEC_CMD_DATA = 0x06,        // Data transfer
+        IEC_CMD_CLOSE = 0x0E,       // Close channel
+        IEC_CMD_OPEN = 0x0F         // Open channel
+    };
+    //! Sends the attention signal to all connected devices
+    uint8_t IECOutATN(uint8_t byte);
+
+    //! Puts the secondary address on the bus
+    uint8_t IECOutSec(uint8_t byte);
+    uint8_t IECOutSecWhileListening(uint8_t byte);
+    uint8_t IECOutSecWhileTalking(uint8_t byte);
+    
+    //! Write a data byte to the bus
+    /*! The last byte is signaled by setting eoi (end of information) to 1 */
+    uint8_t IECOut(uint8_t byte, bool eoi);
+
+    //! Read a data byte from the bus
+    uint8_t IECIn(uint8_t *byte);
+    
+    void IECSetATN();
+    void IECRelATN();
+    void IECTurnaround();
+    void IECRelease();
 };
 	
 #endif

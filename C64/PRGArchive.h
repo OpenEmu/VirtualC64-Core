@@ -1,5 +1,5 @@
 /*
- * (C) 2007 Dirk W. Hoffmann. All rights reserved.
+ * Author: Dirk W. Hoffmann, www.dirkwhoffmann.de
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,50 +21,70 @@
 
 #include "Archive.h"
 
+/*! @class D64Archive
+ *  @brief The D64Archive class declares the programmatic interface for a file in PRG format.
+ */
 class PRGArchive : public Archive {
 
 private:
-	//! Name of the PRG container file
-	char name[256];
 
-	//! Raw data of PRG container file
-	uint8_t *data;
-
-	//! File pointer
-	/*! Stores an offset into the data array */
-	int fp;
+	//! @brief The raw data of this archive.
+    uint8_t *data;
 		
-	//! Size of data array
+    //! @brief File size
 	int size;
+
+    /*! @brief File pointer
+     @discussion An offset into the data array. */
+    int fp;
 
 public:
 
-	//! Constructor
-	PRGArchive();
-	
-	//! Destructor
-	~PRGArchive();
-	
-	//! Returns true of filename points to a valid file of that type
-	static bool isPRGFile(const char *filename);
+    //
+    //! @functiongroup Creating and destructing PRG archives
+    //
+    
+    //! @brief Standard constructor.
+    PRGArchive();
+    
+    //! @brief Standard destructor.
+    ~PRGArchive();
 
-	//! Factory method
-	static PRGArchive *archiveFromFile(const char *filename);
+    //! @brief Returns true iff the specified file is a PRG file
+    static bool isPRGFile(const char *filename);
 
-	//! Virtual functions from Container class
-	bool fileIsValid(const char *filename);
-	bool readFromBuffer(const void *buffer, unsigned length);
-	bool readDataFromFile(FILE *file, struct stat fileProperties);
-	void dealloc();
-	const char *getTypeOfContainer();
-	
-	// Virtual functions from Archive class
-	int getNumberOfItems();
-	const char *getNameOfItem(int n);
-	const char *getTypeOfItem(int n);
-	int getSizeOfItem(int n);
-	uint16_t getDestinationAddrOfItem(int n);	
-	void selectItem(int n);
-	int getByte();
+    //! @brief Creates a PRG archive from a PRG file.
+    static PRGArchive *archiveFromPRGFile(const char *filename);
+
+    /*! @brief Creates a PRG archive from another archive.
+        @result A PRG archive that contains the first directory item of the other archive. */
+    static PRGArchive *archiveFromArchive(Archive *otherArchive);
+
+
+    //
+    // Virtual functions from Container class
+    //
+    
+    void dealloc();
+    
+    ContainerType getType() { return PRG_CONTAINER; }
+    const char *getTypeAsString() { return "PRG"; }
+    
+    bool fileIsValid(const char *filename);
+    bool readFromBuffer(const uint8_t *buffer, unsigned length);
+    unsigned writeToBuffer(uint8_t *buffer);
+    
+    //
+    // Virtual functions from Archive class
+    //
+    
+    int getNumberOfItems();
+    
+    const char *getNameOfItem(int n);
+    const char *getTypeOfItem(int n);
+    uint16_t getDestinationAddrOfItem(int n);
+    
+    void selectItem(int n);
+    int getByte();
 };
 #endif

@@ -44,25 +44,19 @@ FileArchive::isAcceptableFile(const char *filename)
 }
 
 FileArchive *
-FileArchive::archiveFromFile(const char *filename)
+FileArchive::archiveFromRawFiledata(const char *filename)
 {
 	FileArchive *archive;
 
 	fprintf(stderr, "Loading file archive from file...\n");
 	archive = new FileArchive();	
 	if (!archive->readFromFile(filename)) {
-		delete archive;
+        fprintf(stderr, "Failed to load archive\n");
+        delete archive;
 		archive = NULL;
 	}
 	
-	fprintf(stderr, "File archive loaded successfully.\n");
 	return archive;
-}
-
-const char *
-FileArchive::getTypeOfContainer() 
-{
-	return "File";
 }
 
 void 
@@ -81,7 +75,7 @@ FileArchive::fileIsValid(const char *filename)
 }
 
 bool 
-FileArchive::readFromBuffer(const void *buffer, unsigned length)
+FileArchive::readFromBuffer(const uint8_t *buffer, unsigned length)
 {
 	if ((data = (uint8_t *)malloc(length)) == NULL)
 		return false;

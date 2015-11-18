@@ -19,9 +19,6 @@
 #ifndef _BASIC_INC
 #define _BASIC_INC
 
-// TURN OFF ASSERTION CHECKING (FOR RELEASE VERSION ONLY)
-// #define NDEBUG
-
 // General Includes
 #include <stdint.h>
 #include <stdio.h>
@@ -31,18 +28,24 @@
 #include <limits.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/param.h>
 #include <time.h>
+#include <mach/mach.h>
+#include <mach/mach_time.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <errno.h>
 #include <sched.h>
 #include <assert.h>
 #include <math.h>
+#include <ctype.h> 
 
 // C++ includes
 #include <string>
 
-// Macros
+//
+//! @functiongroup Handling low level data objects
+//
 
 //! Evaluates to the high byte of x. x is expected to be of type uint16_t.
 #define HI_BYTE(x) (uint8_t)((x) >> 8)
@@ -53,20 +56,72 @@
 //! Evaluates to the 16 bit value specified by x and y in little endian order (low, high).
 #define LO_HI(x,y) (uint16_t)((y) << 8 | (x))
 
-//! Evaluates to the value of x with bit "nr" set to 1. All other bits remain untouched.
+//! Evaluates to the 32 bit value specified by x and y in little endian order (lowest, low, high, highest).
+#define LO_LO_HI_HI(x,y,z,w) (uint32_t)((w) << 24 | (z) << 16 | (y) << 8 | (x))
+
+//! Evaluates to the 16 bit value specified by x and y in big endian order (high, low).
+#define HI_LO(x,y) (uint16_t)((x) << 8 | (y))
+
+//! Evaluates to the 32 bit value specified by x and y in big endian order (highest, high, low, lowest).
+#define HI_HI_LO_LO(x,y,z,w) (uint32_t)((x) << 24 | (y) << 16 | (z) << 8 | (w))
+
+//! Returns true iff bit n is set in x.
+#define GET_BIT(x,nr) ((x) & (1 << (nr)))
+
+//! Set a single bit.
 #define SET_BIT(x,nr) ((x) |= (1 << (nr)))
 
-//! Evaluates to the value of x with bit "nr" set to 0. All other bits remain untouched.
+//! Clear a single bit.
 #define CLR_BIT(x,nr) ((x) &= ~(1 << (nr)))
 
-// Conversion functions
+//! Toggle a single bit.
+#define TOGGLE_BIT(x,nr) ((x) ^= (1 << (nr)))
 
-//! Convert PETASCII character to ASCII
-/*! Returns '.' if character has no printable equivalent */
+
+//
+//! @functiongroup Pretty printing
+//
+
+void printReadable(const void *data, int length);
+
+//
+//! @functiongroup Converting low level data objects
+//
+
+
+/*! @brief Converts a PET character to a unicocde character.
+ *  @discussion This function uses the PET upper case character set.
+ *  @result Returns 0x00 if no unicode counterpart exists. */
+uint16_t pet2unicode(uint8_t petchar);
+
+/*! @brief Converts a PET character to an ASCII character.
+ *  @discussion This function uses the PET upper case character set.
+ *  @result Returns '.' if no ASCII counterpart exists .
+ *  @deprecated Use pet2ascii instead. */
 char toASCII(char c);
+
+/*! @brief Converts a PET character to an ASCII character.
+ *  @discussion This function uses the PET upper case character set.
+ *  @result Returns '.' if no ASCII counterpart exists. */
+uint8_t pet2ascii(uint8_t petchar);
+
+/*! @brief Converts an PET string into a ASCII string. */
+void pet2ascii(char *petstring);
+
+/*! @brief Converts an ASCII character to a PET character.
+ *  @discussion This function translates into the unshifted PET character set. I.e., lower case characters are converted to uppercase characters.
+ *  @result Returns ' ' if the ASCII character is not covered. */
+uint8_t ascii2pet(uint8_t asciichar);
+
+/*! @brief Converts an ASCII string into a PET string. */
+void ascii2pet(char *asciistring);
+
 
 //! Write ASCII representation of 8 bit value to a string
 void binary8_to_string(uint8_t value, char *s);
+
+//! Write ASCII representation of 32 bit value to a string
+void binary32_to_string(uint32_t value, char *s);
 
 //! Convert a BCD number to a binary value
 inline uint8_t BCDToBinary(uint8_t value) { return (10 * (value >> 4)) + (value & 0x0F); }
@@ -76,7 +131,10 @@ inline uint8_t BinaryToBCD(uint8_t value) { return ((value / 10) << 4) + (value 
 
 //! Increment BCD number by one
 inline uint8_t incBCD(uint8_t value) { return ((value & 0x0F) == 0x09) ?  (value & 0xF0) + 0x10 : (value & 0xF0) + ((value + 0x01) & 0x0F); }
-// inline uint8_t incBCD(uint8_t value) { uint8_t newValue = _incBCD(value); printf("%02X -> %02X\n", value, newValue); return newValue; }
+
+//
+//! Handling file and path names
+//
 
 //! Extract directory from path
 inline std::string ExtractDirectory( const std::string& path )
@@ -123,25 +181,47 @@ bool checkFileSize(const char *filename, int min, int max);
 bool 
 checkFileHeader(const char *filename, int *header);
 
-// Timing
+//
+//! @functiongroup Managing time
+//
 
 //! Application launch time in seconds
 /*! The value is read by function \a msec for computing the elapsed number of microseconds. */
 extern long tv_base;
 
-//! Return the number of elapsed milliseconds since program launch
-uint64_t msec();
-//! Read real-time clock (1/10th seconds)
+//! Return the number of elapsed microseconds since program launch
+uint64_t usec();
+
+//! Reads the real-time clock (1/10th seconds)
 uint8_t localTimeSecFrac();
-//! Read real-time clock (seconds)
+
+//! Reads the real-time clock (seconds)
 uint8_t localTimeSec();
-//! Read real-time clock (minutes)
+
+//! Reads the real-time clock (minutes)
 uint8_t localTimeMin();
-//! Read real-time clock (hours)
+
+//! Reads the real-time clock (hours)
 uint8_t localTimeHour();
 
 //! Sleep for some microseconds
-void sleepMicrosec(uint64_t millisec);
+//  DEPRECATED. USE SleepUntil INSTEAD
+void sleepMicrosec(uint64_t usec);
+
+/*! @brief  Sleeps until kernel timer reaches kernelTargetTime
+ *  @param  kernelEarlyWakeup To increase timing precision, the function wakes up the thread earlier
+ *          by this amount and waits actively in a delay loop until the deadline is reached.
+ *  @result Overshoot time (jitter), measured in kernel time. Smaller values are better, 0 is best. 
+ */
+int64_t sleepUntil(uint64_t kernelTargetTime, uint64_t kernelEarlyWakeup = 0);
+
+
+//
+//
+//! @functiongroup Debugging
+//
+
+#define RANGE(val,min,max) ((val) >= (min) &&  (val) <= (max))
 
 #endif
 

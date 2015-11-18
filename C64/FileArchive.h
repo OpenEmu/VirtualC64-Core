@@ -1,5 +1,5 @@
 /*
- * (C) 2011 Dirk W. Hoffmann. All rights reserved.
+ * Author: Dirk W. Hoffmann, www.dirkwhoffmann.de
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,50 +21,63 @@
 
 #include "Archive.h"
 
+/*! @class FileArchive
+ *  @brief The FileArchive class declares the programmatic interface for a file that does not match any of the standard formats.
+    @discussion If a file does not match any of the standard formats, each byte is interpreted as raw data and is loaded at the standard memory location.
+ */
 class FileArchive : public Archive {
 
 private:
-	//! Raw file data
-	uint8_t *data;
+	//! @brief The raw data of this archive.
+    uint8_t *data;
 
-	//! Name buffer
-	char name[18];
-
-	//! File pointer (offset into data array)
+    /*! @brief File pointer
+        @discussion An offset into the data array. */
 	int fp;
 		
-	//! Size of data array
+    //! @brief File size
 	int size;
 
 public:
 
-	//! Constructor
-	FileArchive();
-	
-	//! Destructor
-	~FileArchive();
-	
-	//! Returns true if filename points to a valid file of that type
-	static bool isAcceptableFile(const char *filename);
-
-	//! Factory method
-	static FileArchive *archiveFromFile(const char *filename);
-
-#pragma mark Container
-	
-	bool fileIsValid(const char *filename);
-	bool readFromBuffer(const void *buffer, unsigned length);
-	void dealloc();
-	const char *getTypeOfContainer();
-	
-#pragma mark Archive
-
-	int getNumberOfItems();
-	const char *getNameOfItem(int n);
-	const char *getTypeOfItem(int n);
-	int getSizeOfItem(int n);
-	uint16_t getDestinationAddrOfItem(int n);	
-	void selectItem(int n);
-	int getByte();
+    //! @brief Standard constructor.
+    FileArchive();
+    
+    //! @brief Standard destructor.
+    ~FileArchive();
+    
+    //! @brief Returns true if filename points to a loadable file
+    static bool isAcceptableFile(const char *filename);
+    
+    //! @brief Creates an archive from a loadable file.
+    static FileArchive *archiveFromRawFiledata(const char *filename);
+    
+    //
+    // Virtual functions from Container class
+    //
+    
+    void dealloc();
+    
+    // const char *getName();
+    ContainerType getType() { return FILE_CONTAINER; }
+    const char *getTypeAsString() { return "FILE"; }
+    
+    bool fileIsValid(const char *filename);
+    bool readFromBuffer(const uint8_t *buffer, unsigned length);
+    // unsigned writeToBuffer(uint8_t *buffer);
+    
+    //
+    // Virtual functions from Archive class
+    //
+    
+    int getNumberOfItems();
+    
+    const char *getNameOfItem(int n);
+    const char *getTypeOfItem(int n);
+    int getSizeOfItem(int n);
+    uint16_t getDestinationAddrOfItem(int n);
+    
+    void selectItem(int n);
+    int getByte();
 };
 #endif

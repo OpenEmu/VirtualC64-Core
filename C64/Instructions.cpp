@@ -17,98 +17,74 @@
  */
 
 #include "C64.h"
-		
+
+// DIRK DEBUG, REMOVE ASAP
+extern unsigned dirktrace;
+extern unsigned dirkcnt;
 
 // Cycle 0
 void 
 CPU::fetch() {
-	
-	bool doNMI = false, doIRQ = false;
+    
+    bool doNMI = false, doIRQ = false;
 	
 	PC_at_cycle_0 = PC;
 	
-	// Used for debugging...
-	// history[historyPtr++] = packState(); 
+	// Check interrupt lines
+    // if (interruptsPending) {
+    if (1) {
+    
+        if (nmiEdge && NMILineRaisedLongEnough()) {
+            if (tracingEnabled())
+                debug(1, "NMI (source = %02X)\n", nmiLine);
+            nmiEdge = false;
+            next = &CPU::nmi_2;
+            doNMI = true;
+            return;
 
-	// Check interrupt line
-	/* "Ist dieser Eingang auf Low-Pegel, wird eine Interruptbearbeitung ausgelšst, sofern der Interrupt
-	 Ÿber ein Bit im Statusregister freigegeben wurde. Die Unterbrechung erfolgt frŸhestens nach zwei 
-	 Taktzyklen beim Erreichen des nŠchsten Befehls. Mit diesem Pin kann der VIC einen Interrupt im 
-	 Prozessor auslšsen. Interrupts werden nur erkannt, wenn RDY high ist. */
-	if (nmiNegEdge && NMILineRaisedLongEnough()) {
-		if (tracingEnabled())
-			debug(1, "NMI (source = %02X)\n", nmiLine);
-		nmiNegEdge = false;
-		next = &CPU::nmi_2;
-		doNMI = true;
-		return;
+        } else if (irqLine && !IRQsAreBlocked() && IRQLineRaisedLongEnough()) {
+            if (tracingEnabled())
+                debug(1, "IRQ (source = %02X)\n", irqLine);
+            /*
+            if (debugirq) {
+                debugirq = 0;
+                debug("IRQ (source = %02X, cycle = %lld)\n", irqLine, c64->getCycles());
+            }
+             */
+            /*
+            if (c64->mem->peek(0x0315) == 0xF9 && c64->mem->peek(0x0314) == 0x2C) {
+                debug("INTERRUPTING TO %02X%02X CASETTE ROUTINE at cycle %lld (CIA1.timerB = %04X) irqline = %02X\n",
+                      c64->mem->peek(0xFFFF), c64->mem->peek(0xFFFE), c64->getCycles(), c64->cia1->counterB, irqLine);
+                // c64->cpu->setTraceMode(true);
+            }
+            */
+            next = &CPU::irq_2;
+            doIRQ = true;
+            return;
+        }
+    }
+    
+    // Execute fetch phase  
+    FETCH_OPCODE
+    next = actionFunc[opcode];
 
-	} else if (irqLine && !IRQsAreBlocked() && IRQLineRaisedLongEnough()) {
-		if (tracingEnabled())
-			debug(1, "IRQ (source = %02X)\n", irqLine);
-		next = &CPU::irq_2;
-		doIRQ = true;
-		return;
-	} 
-
-#if 0
-	// REMOVE AFTER DEBUGGING!!!
-	// Automatically switch on tracing when PC reaches a certain address
-	if (current_trace > 0 && current_trace <= max_traces) {		
-		// keep tracing
-		current_trace++; 
-	}
-	if (PC == 0x0B40 && current_trace == 0 && max_traces > 0) {
-	//if (c64->event2 && current_trace == 0 && max_traces > 0) {
-		if (!(logfile = fopen("/tmp/virtualc64.log", "w"))) {
-			panic("Cannot open logfile\n");
-		}
-		// start tracing
-		setTraceMode(true); 
-		c64->cia1->logfile = logfile;
-		c64->cia1->setTraceMode(true); 
-		c64->cia2->logfile = logfile;
-		c64->cia2->setTraceMode(true); 
-		current_trace = 1;
-	} 
-
-	if (current_trace > 1 && current_trace == max_traces) {
-		// stop tracing
-		setTraceMode(false); 
-		c64->cia2->setTraceMode(false); 
-		c64->cia1->setTraceMode(false); 
-		c64->cia1->logfile = NULL;
-		c64->cia2->logfile = NULL;		
-		logfile = NULL;
-	}
-	// END DEBUG
-#endif
-	
 	// Disassemble command if requested
 	if (tracingEnabled()) {
-		//c64->cia1->dumpTrace();
-		//c64->cia2->dumpTrace();
-		if (current_trace)
-			debug(1, "%05d: ", current_trace);
 		debug(1, "%s\n", disassemble());
 	}
 	
 	// Check breakpoint tag
-	if (breakpoint[PC] != NO_BREAKPOINT) {
-		if (breakpoint[PC] & SOFT_BREAKPOINT) {
-			breakpoint[PC] &= ~SOFT_BREAKPOINT; // Soft breakpoints get deleted when reached
+	if (breakpoint[PC_at_cycle_0] != NO_BREAKPOINT) {
+		if (breakpoint[PC_at_cycle_0] & SOFT_BREAKPOINT) {
+			breakpoint[PC_at_cycle_0] &= ~SOFT_BREAKPOINT; // Soft breakpoints get deleted when reached
 			setErrorState(SOFT_BREAKPOINT_REACHED);
 		} else {
 			setErrorState(HARD_BREAKPOINT_REACHED);
 		}
 		debug(1, "Breakpoint reached\n");
 	}
-
-	opcode = mem->peek(PC);
-	PC++;
-	next = actionFunc[opcode];
 }
-	
+
 
 void 
 CPU::registerCallback(uint8_t opcode, void (CPU::*func)())
@@ -445,13 +421,11 @@ void CPU::registerInstructions()
 void CPU::JAM()
 {
 	setErrorState(ILLEGAL_INSTRUCTION);
-	// debug("Illegal instruction\n");
 	next = &CPU::JAM_2;
 }
 
 void CPU::JAM_2()
 {
-	// debug("JAM 2\n");
 	DONE;
 }
 
@@ -1172,7 +1146,7 @@ void CPU::branch_3_overflow()
 	
 // ------------------------------------------------------------------------------
 void CPU::BCC_relative()
-{	
+{
 	READ_IMMEDIATE;
 	if (!getC()) { 
 		next = &CPU::BCC_relative_2;
@@ -1437,8 +1411,8 @@ void CPU::BRK_3()
 	// "The official NMOS 65xx documentation claims that the BRK instruction could only cause a jump to the IRQ
 	//  vector ($FFFE). However, if an NMI interrupt occurs while executing a BRK instruction, the processor will
 	//  jump to the NMI vector ($FFFA), and the P register will be pushed on the stack with the B flag set."
-	if (nmiNegEdge) {
-		nmiNegEdge = false;
+	if (nmiEdge) {
+        clearNMIEdge();
 		next = &CPU::BRK_nmi_4;
 	} else {
 		next = &CPU::BRK_4;
@@ -1498,12 +1472,27 @@ void CPU::BRK_nmi_6()
 void CPU::BVC_relative()
 {	
 	READ_IMMEDIATE;
-	if (!getV()) { 
-		next = &CPU::BVC_relative_2;
-	} else {
-		DONE;
-	}
+
+    if (chipModel == MOS6502 /* Drive CPU */ && !c64->floppy->getBitAccuracy()) {
+        
+        // Special handling for the VC1541 CPU. Taken from Frodo
+        if (!((c64->floppy->via2.io[12] & 0x0E) == 0x0E || getV())) {
+            next = &CPU::BVC_relative_2;
+        } else {
+            DONE;
+        }
+        
+    } else {
+        
+        // Standard CPU behavior
+        if (!getV()) {
+            next = &CPU::BVC_relative_2;
+        } else {
+            DONE;
+        }
+    }
 }
+
 void CPU::BVC_relative_2()
 {
 	IDLE_READ_IMPLIED;
@@ -1532,12 +1521,27 @@ void CPU::BVC_relative_2()
 void CPU::BVS_relative()
 {	
 	READ_IMMEDIATE;
-	if (getV()) { 
-		next = &CPU::BVS_relative_2;
-	} else {
-		DONE;
-	}
+    
+    if (chipModel == MOS6502 /* Drive CPU */ && !c64->floppy->getBitAccuracy()) {
+        
+        // Special handling for the VC1541 CPU. Taken from Frodo
+        if ((c64->floppy->via2.io[12] & 0x0E) == 0x0E || getV()) {
+            next = &CPU::BVS_relative_2;
+        } else {
+            DONE;
+        }
+        
+    } else {
+        
+        // Standard CPU behavior
+        if (getV()) {
+            next = &CPU::BVS_relative_2;
+        } else {
+            DONE;
+        }
+    }
 }
+
 void CPU::BVS_relative_2()
 {
 	IDLE_READ_IMPLIED;
@@ -1620,6 +1624,14 @@ void CPU::CLV()
 {
 	IDLE_READ_IMPLIED;
 	setV(0);
+    
+/*
+    if (chipModel == MOS6502) {
+        if (!c64->floppy->getBitAccuracy()) {
+            setV(1); // A new byte is always ready
+        }
+    }
+*/
 	DONE;
 }
 
@@ -4949,7 +4961,7 @@ void CPU::ARR_immediate()
 		setZ(A == 0);
 		setV((tmp2 ^ A) & 0x40);
 		if ((tmp2 & 0x0f) + (tmp2 & 0x01) > 5)
-			A = A & 0xf0 | (A + 6) & 0x0f;
+			A = (A & 0xf0) | ((A + 6) & 0x0f);
 		c_flag = (tmp2 + (tmp2 & 0x10)) & 0x1f0;
 		if (c_flag > 0x50) {
 			setC(1);
@@ -7300,6 +7312,5 @@ void ((CPU::*CPU::callbacks[])(void)) = {
 &CPU::SRE_indirect_y, &CPU::SRE_indirect_y_2, &CPU::SRE_indirect_y_3, &CPU::SRE_indirect_y_4, &CPU::SRE_indirect_y_5, &CPU::SRE_indirect_y_6, &CPU::SRE_indirect_y_7,
 
 &CPU::TAS_absolute_y, &CPU::TAS_absolute_y_2, &CPU::TAS_absolute_y_3, &CPU::TAS_absolute_y_4,
-
 NULL
 };

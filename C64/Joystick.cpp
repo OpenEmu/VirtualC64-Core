@@ -1,5 +1,6 @@
 /*
- * (C) 2009 Benjamin Klein. All rights reserved.
+ * Authors: Benjamin Klein (Original)
+ *          Dirk W. Hoffmann (Further development) 
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,21 +19,63 @@
  
 #include "C64.h"
 
-Joystick::Joystick() : _active( false ), _buttonPressed( false ), _axisX( JOYSTICK_AXIS_NONE ), _axisY( JOYSTICK_AXIS_NONE ) { }
-bool Joystick::IsActive()
-{ return _active; }
-bool Joystick::GetButtonPressed()
-{ return _buttonPressed; }
-JoystickAxisState Joystick::GetAxisX()
-{ return _axisX; }
-JoystickAxisState Joystick::GetAxisY()
-{ return _axisY; }
+Joystick::Joystick() {
 
-void Joystick::SetActiveState( bool active )
-{ _active = active; }
-void Joystick::SetButtonPressed( bool pressed )
-{ _buttonPressed = pressed; }
-void Joystick::SetAxisX( JoystickAxisState state )
-{ _axisX = state; }
-void Joystick::SetAxisY( JoystickAxisState state )
-{ _axisY = state; }
+    name = "Joystick";
+    debug(2, "    Creating joystick at address %p...\n", this);
+    
+    // Register snapshot items
+    SnapshotItem items[] = {
+        
+        { &_buttonPressed,  sizeof(_buttonPressed), CLEAR_ON_RESET },
+        { &_axisX,          sizeof(_axisX),         CLEAR_ON_RESET },
+        { &_axisY,          sizeof(_axisY),         CLEAR_ON_RESET },
+        { NULL,             0,                      0 }};
+    
+    registerSnapshotItems(items, sizeof(items));
+}
+
+Joystick::~Joystick()
+{
+}
+
+void
+Joystick::dumpState()
+{
+    msg("Joystick port\n");
+    msg("-------------\n");
+    msg("Button: %s AxisX: %d AxisY: %d\n", _buttonPressed ? "YES" : "NO", _axisX, _axisY);
+}
+
+bool Joystick::GetButtonPressed()
+{
+    return _buttonPressed;
+}
+
+JoystickAxisState Joystick::GetAxisX()
+{
+    return _axisX;
+}
+
+JoystickAxisState Joystick::GetAxisY()
+{
+    return _axisY;
+}
+
+void Joystick::SetButtonPressed(bool pressed)
+{
+    // fprintf(stderr,"%p %s", this, __PRETTY_FUNCTION__);
+    _buttonPressed = pressed;
+}
+
+void Joystick::SetAxisX(JoystickAxisState state)
+{
+    // fprintf(stderr,"%p %s", this, __PRETTY_FUNCTION__);
+    _axisX = state;
+}
+
+void Joystick::SetAxisY(JoystickAxisState state)
+{
+    // fprintf(stderr,"%p %s", this, __PRETTY_FUNCTION__);
+    _axisY = state;
+}

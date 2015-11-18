@@ -16,46 +16,41 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _P00ARCHIVE_INC
-#define _P00ARCHIVE_INC
+#ifndef _TAPARCHIVE_INC
+#define _TAPARCHIVE_INC
 
 #include "Archive.h"
 
-/*! @class D64Archive
- *  @brief The D64Archive class declares the programmatic interface for a file in P00 format.
+/*! @class TAPArchive
+ *  @brief The TAPArchive class declares the programmatic interface for a file in TAP format.
  */
-class P00Archive : public Archive {
-
+class TAPArchive : public Container {
+    
 private:
-
+    
     //! @brief The raw data of this archive.
     uint8_t *data;
-		
+    
     //! @brief File size
-	int size;
-
+    int size;
+    
     /*! @brief File pointer
      @discussion An offset into the data array. */
     int fp;
-
+    
 public:
-
+    
     //! @brief Standard constructor.
-    P00Archive();
+    TAPArchive();
     
     //! @brief Standard destructor.
-    ~P00Archive();
+    ~TAPArchive();
     
-    //! @brief Returns true iff the specified file is a P00 file
-    static bool isP00File(const char *filename);
-
-    //! @brief Creates a P00 archive from a P00 file.
-    static P00Archive *archiveFromP00File(const char *filename);
-
-    /*! @brief Creates a P00 archive from another archive.
-     @result A P00 archive that contains the first directory item of the other archive. */
-    static P00Archive *archiveFromArchive(Archive *otherArchive);
-
+    //! @brief Returns true iff the specified file is a TAP file
+    static bool isTAPFile(const char *filename);
+    
+    //! @brief Creates a TAP archive from a TAP file.
+    static TAPArchive *archiveFromTAPFile(const char *filename);
     
     //
     // Virtual functions from Container class
@@ -64,24 +59,19 @@ public:
     void dealloc();
     
     const char *getName();
-    ContainerType getType() { return P00_CONTAINER; }
-    const char *getTypeAsString() { return "P00"; }
+    ContainerType getType() { return TAP_CONTAINER; }
+    const char *getTypeAsString() { return "TAP"; }
     
     bool fileIsValid(const char *filename);
     bool readFromBuffer(const uint8_t *buffer, unsigned length);
     unsigned writeToBuffer(uint8_t *buffer);
     
     //
-    // Virtual functions from Archive class
+    // Accessing the archive
     //
     
-    int getNumberOfItems();
-    
-    const char *getNameOfItem(int n);
-    const char *getTypeOfItem(int n);
-    uint16_t getDestinationAddrOfItem(int n);
-    
-    void selectItem(int n);
-    int getByte();
+    unsigned TAPversion() { return data[0x000C]; }
+    uint8_t *getData() { return &data[0x0014]; }
+    int getSize() { return size - 0x14; }
 };
 #endif

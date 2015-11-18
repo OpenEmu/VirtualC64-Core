@@ -1,5 +1,5 @@
 /*
- * (C) 2006 Dirk W. Hoffmann. All rights reserved.
+ * Written 2006 - 2015 by Dirk W. Hoffmann
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,27 +20,47 @@
 
 VC1541::VC1541()
 {
-	debug(2, "Creating virtual VC1541 at address %p\n", this);
 	name = "1541";
-	
-	// Clear references
-	c64 = NULL;
-	iec = NULL;
-	cpu = NULL;
+    debug(2, "Creating virtual VC1541 at address %p\n", this);
 	
 	// Create sub components
 	mem = new VC1541Memory();
-	cpu = new CPU();	
+	cpu = new CPU();
 	cpu->setName("1541CPU");
-	via1 = new VIA1();
-	via2 = new VIA2();
-		
-	// Connect components
-	cpu->setMemory(mem);
-	mem->setCPU(cpu);
-	mem->setDrive(this);
-	via1->setDrive(this);
-	via2->setDrive(this);	
+    cpu->chipModel = CPU::MOS6502;
+    
+    // Register sub components
+    VirtualComponent *subcomponents[] = { mem, cpu, &via1, &via2, &disk, NULL };
+    registerSubComponents(subcomponents, sizeof(subcomponents)); 
+
+    // Register snapshot items
+    SnapshotItem items[] = {
+
+        // Configuration items
+        { &bitAccuracy,             sizeof(bitAccuracy),            KEEP_ON_RESET },
+        { &sendSoundMessages,       sizeof(sendSoundMessages),      KEEP_ON_RESET },
+        
+        // Internal state
+        { &bitReadyTimer,           sizeof(bitReadyTimer),          CLEAR_ON_RESET },
+        { &byteReadyCounter,        sizeof(byteReadyCounter),       CLEAR_ON_RESET },
+        { &rotating,                sizeof(rotating),               CLEAR_ON_RESET },
+        { &redLED,                  sizeof(redLED),                 CLEAR_ON_RESET },
+        { &diskPartiallyInserted,   sizeof(diskPartiallyInserted),  CLEAR_ON_RESET },
+        { &halftrack,               sizeof(halftrack),              CLEAR_ON_RESET },
+        { &bitoffset,               sizeof(bitoffset),              CLEAR_ON_RESET },
+        { &zone,                    sizeof(zone),                   CLEAR_ON_RESET },
+        { &read_shiftreg,           sizeof(read_shiftreg),          CLEAR_ON_RESET },
+        { &write_shiftreg,          sizeof(write_shiftreg),         CLEAR_ON_RESET },
+        { &sync,                    sizeof(sync),                   CLEAR_ON_RESET },
+        
+        // Disk properties (will survive reset)
+        { &diskInserted,            sizeof(diskInserted),           KEEP_ON_RESET },
+        { NULL,                     0,                              0 }};
+    
+    registerSnapshotItems(items, sizeof(items));
+    
+    sendSoundMessages = true;
+    resetDisk();
 }
 
 VC1541::~VC1541()
@@ -49,161 +69,187 @@ VC1541::~VC1541()
 	
 	delete cpu;	
 	delete mem;
-	delete via1;
-	delete via2;
 }
 
-void 
+void
 VC1541::reset()
 {
-	debug (2, "Resetting VC1541...\n");
+    VirtualComponent::reset();
+    
+    // Establish bindings
+    iec = c64->iec;
+    
+    cpu->mem = mem;
+    cpu->setPC(0xEAA0);
+    halftrack = 41;
+}
 
-	cpu->reset();
-	cpu->setPC(0xEAA0);
-	mem->reset();
-	via1->reset();
-	via2->reset();
-		
-	byteReadyTimer = 0;
-	track = 40;
-	offset = 0;
-	noOfFFBytes = 0;
+void
+VC1541::resetDisk()
+{
+    debug (2, "Resetting disk in VC1541...\n");
+    
+    // Disk properties
+    disk.clearDisk();
+    diskInserted = false;
+    diskPartiallyInserted = false;
+}
 
-	clearDisk();
-	stopRotating();
-	deactivateRedLED();	
+void
+VC1541::ping()
+{
+    debug(2, "Pinging VC1541...\n");
+    c64->putMessage(MSG_VC1541_LED, redLED ? 1 : 0);
+    c64->putMessage(MSG_VC1541_MOTOR, rotating ? 1 : 0);
+    c64->putMessage(MSG_VC1541_DISK, diskInserted ? 1 : 0);
+
+    cpu->ping();
+    mem->ping();
+    via1.ping();
+    via2.ping();
+
+}
+
+#if 0
+uint32_t
+VC1541::stateSize()
+{
+    uint32_t result = VirtualComponent::stateSize();
+    
+    result += disk.stateSize();
+    result += cpu->stateSize();
+    result += via1.stateSize();
+    result += via2.stateSize();
+    result += mem->stateSize();
+    
+    return result;
 }
 
 void
 VC1541::loadFromBuffer(uint8_t **buffer)
 {	
-	debug(2, "  Loading VC1541 state...\n");
-
-	for (unsigned i = 0; i < 84; i++)
-		for (unsigned j = 0; j < sizeof(data[i]); j++)
-			data[i][j] = read8(buffer);
-	for (unsigned i = 0; i < 84; i++) 
-		length[i] = read16(buffer);
-	rotating = (bool)read8(buffer);
-	byteReadyTimer = (int)read16(buffer);
-	track = (int)read16(buffer);
-	offset = (int)read16(buffer);
-	noOfFFBytes = (int)read16(buffer);
-	writeProtection = (bool)read8(buffer);
+    uint8_t *old = *buffer;
+    
+    VirtualComponent::loadFromBuffer(buffer);
+    disk.loadFromBuffer(buffer);
 	cpu->loadFromBuffer(buffer);
-	via1->loadFromBuffer(buffer);	
-	via2->loadFromBuffer(buffer);
-	mem->loadFromBuffer(buffer);
+    via1.loadFromBuffer(buffer);
+    via2.loadFromBuffer(buffer);
+    mem->loadFromBuffer(buffer);
+    
+    assert(*buffer - old == stateSize());
 }
 
 void 
 VC1541::saveToBuffer(uint8_t **buffer)
 {	
-	debug(2, "  Saving VC1541 state...\n");
-
-	for (unsigned i = 0; i < 84; i++)
-		for (unsigned j = 0; j < sizeof(data[i]); j++)
-			write8(buffer, data[i][j]);
-	for (unsigned i = 0; i < 84; i++) 
-		write16(buffer, length[i]);
-	write8(buffer, (uint8_t)rotating);
-	write16(buffer, (uint16_t)byteReadyTimer);
-	write16(buffer, (uint16_t)track);
-	write16(buffer, (uint16_t)offset);
-	write16(buffer, (uint16_t)noOfFFBytes);
-	write8(buffer, (uint8_t)writeProtection);
-	cpu->saveToBuffer(buffer);
-	via1->saveToBuffer(buffer);	
-	via2->saveToBuffer(buffer);	
-	mem->saveToBuffer(buffer);	
+    uint8_t *old = *buffer;
+    
+    VirtualComponent::saveToBuffer(buffer);
+    disk.saveToBuffer(buffer);
+    cpu->saveToBuffer(buffer);
+    via1.saveToBuffer(buffer);
+    via2.saveToBuffer(buffer);
+	mem->saveToBuffer(buffer);
+    
+    assert(*buffer - old == stateSize());
 }
+#endif 
 
 void 
 VC1541::dumpState()
 {
 	msg("VC1541\n");
 	msg("------\n\n");
-	
-#if 0	
-	FILE *file = fopen("/Users/hoff/tmp/d64image.txt","w");
-	
-	if (file != NULL) {
-		dumpDisk(file);
-		fclose(file);
-	}
-	
-	int t, i;
-	/* Directory track... */
-	t = 18;
-	for (i = 0; i < 4096; i+= 16) {
-		debug(1, "(%d,%d): %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n", 
-			  t, i,
-			  getData(t,i+0), getData(t,i+1), getData(t,i+2), getData(t,i+3),
-			  getData(t,i+4), getData(t,i+5), getData(t,i+6), getData(t,i+7),
-			  getData(t,i+8), getData(t,i+9), getData(t,i+10), getData(t,i+11),
-			  getData(t,i+12), getData(t,i+13), getData(t,i+14), getData(t,i+15));
-	}
-#endif
-	
-	msg("         Head timer : %d\n", byteReadyTimer);
-	msg("              Track : %d\n", track);
-	msg("       Track offset : %d\n", offset);
-	msg("Sync bytes in a row : %d\n", noOfFFBytes);
-	msg("  Symbol under head : %02X\n", readHead());
-	msg("        Next symbol : %02X\n", readHeadLookAhead());
+	msg(" Bit ready timer : %d\n", bitReadyTimer);
+	msg("   Head position : Track %d, Bit offset %d\n", halftrack, bitoffset);
+	msg("            SYNC : %d\n", sync);
+    msg("       Read mode : %s\n", readMode() ? "YES" : "NO");
 	msg("\n");
+    disk.dumpState();
 }
 
-void 
-VC1541::setWriteProtection(bool b)
+void
+VC1541::executeBitReady()
 {
-	writeProtection = b;
+    read_shiftreg <<= 1;
+
+    if (readMode()) {
+        
+        // Read mode
+        read_shiftreg |= readBitFromHead();
+
+        // Set SYNC signal
+        if ((read_shiftreg & 0x3FF) == 0x3FF) {
+
+            sync = true;
+            
+        } else {
+
+            if (sync)
+                byteReadyCounter = 0; // Cleared on falling edge of SYNC
+            sync = false;
+        }
+        
+    } else {
+        
+        // Write mode
+        writeBitToHead(write_shiftreg & 0x80);
+        disk.setModified(true); 
+        sync = false;
+    }
+    write_shiftreg <<= 1;
+    
+    rotateDisk();
+    
+    // Perform action if byte is complete
+    if (byteReadyCounter++ == 7) {
+        executeByteReady();
+        byteReadyCounter = 0;
+    }
+    
+    bitReadyTimer += cyclesPerBit[zone];
 }
 
-bool 
-VC1541::executeOneCycle()
+void
+VC1541::executeByteReady()
 {
-	bool result;
-	
-	via1->execute(1);
-	via2->execute(1);
-	result = cpu->executeOneCycle();
-		
-	if (byteReadyTimer == 0)
-		return result;
-
-	if (byteReadyTimer > 1) {
-		byteReadyTimer--;
-		return result;
-	}
-
-	// Reset timer
-	byteReadyTimer = VC1541_CYCLES_PER_BYTE;
-						
-	// Rotate disk
-	rotateDisk();
-	if (readHead() == 0xFF)
-		noOfFFBytes++;
-	else
-		noOfFFBytes = 0;
-	if (noOfFFBytes <= 1) signalByteReady();
-			
-	// Read or write data
-	if (via2->isReadMode()) {
-		via2->ora = readHead();
-	} else {
-		writeByteToDisk(via2->ora);
-		signalByteReady();
-	}	
-
-	return result;
+    // assert(bitoffset % 8 == 0);
+    
+    if (readMode() && !sync) {
+        byteReady(read_shiftreg);
+    }
+    if (writeMode()) {
+        write_shiftreg = via2.ora;
+        byteReady();
+    }
 }
+
+inline void
+VC1541::byteReady(uint8_t byte)
+{
+    // On the VC1541 logic board, the byte ready signal is computed by a NAND gate with three inputs.
+    // Two of them are clock lines ensuring that a signal is generated every eigths bit.
+    // The third signal is hard-wired to pin CA2 of VIA2. By pulling CA2 low, the CPU can silence the
+    // the byte ready line. E.g., this is done when moving the drive head to a different track
+    if (via2.CA2()) {
+        via2.ira = byte;
+        byteReady();
+    }
+}
+
+inline void
+VC1541::byteReady()
+{
+    if (via2.overflowEnabled()) cpu->setV(1);
+}
+
 
 void 
 VC1541::simulateAtnInterrupt()
 {
-	if (via1->atnInterruptsEnabled()) {
-		via1->indicateAtnInterrupt();
+	if (via1.atnInterruptsEnabled()) {
+		via1.indicateAtnInterrupt();
 		cpu->setIRQLineATN();
 		// debug("CPU is interrupted by ATN line.\n");
 	} else {
@@ -211,388 +257,197 @@ VC1541::simulateAtnInterrupt()
 	}
 }
 
-void 
-VC1541::activateRedLED() 
+void
+VC1541::setZone(uint8_t z)
 {
-    redLED = true;
-	c64->putMessage(MSG_VC1541_LED, 1);
+    assert (z <= 3);
+    
+    if (z != zone) {
+        debug(3, "Switching from disk zone %d to disk zone %d\n", zone, z);
+        zone = z;
+    }
 }
 
 void
-VC1541::deactivateRedLED() 
-{ 
-    redLED = false;
-	c64->putMessage(MSG_VC1541_LED, 0); 
-}
-
-void 
-VC1541::startRotating() 
-{ 
-	debug(2, "Starting drive engine (%2X)\n", cpu->getPC());
-	rotating = true;
-	byteReadyTimer = VC1541_CYCLES_PER_BYTE;
-	c64->putMessage(MSG_VC1541_MOTOR, 1);
-}
-
-void 
-VC1541::stopRotating() 
-{ 
-	debug(2, "Stopping drive engine (%2X)\n", cpu->getPC()); 
-	rotating = false;
-
-	c64->putMessage(MSG_VC1541_MOTOR, 0);
-}
-
-void 
-VC1541::rotateDisk()
-{ 
-	offset++; 
-	if (offset >= length[track]) offset = 0; 
-}
-
-void 
-VC1541::moveHead(int distance)
+VC1541::setRedLED(bool b)
 {
-	track += distance;
-	if (track < 0) track = 0;
-	if (track > 83) track = 83;
-//	offset = 0;
-	offset = offset % length[track];
-
-	if (distance == 1)
-		debug(2, "Head up (to %2.1f) at %4X\n", (track + 2) / 2.0, cpu->getPC());
-	else if (distance == -1)
-		debug(2, "Head down (to %2.1f) at %4X\n", (track + 2) / 2.0, cpu->getPC());
-	else 
-		debug(2, "Head ???\n");
+    if (!redLED && b) {
+        redLED = true;
+        c64->putMessage(MSG_VC1541_LED, 1);
+    } else if (redLED && !b) {
+        redLED = false;
+        c64->putMessage(MSG_VC1541_LED, 0);
+    }
 }
 
 void
-VC1541::clearHalftrack(int nr)
+VC1541::setRotating(bool b)
 {
-	assert(nr >= 1 && nr <= 84);
-	
-	length[nr-1] = sizeof(data[nr-1]);
-	// memset(data[nr-1], 0, length[nr-1]);
-	memset(data[nr-1], 0x55, length[nr-1]);
+    if (!rotating && b) {
+        rotating = true;
+        c64->putMessage(MSG_VC1541_MOTOR, 1);
+    } else if (rotating && !b) {
+        rotating = false;
+        c64->putMessage(MSG_VC1541_MOTOR, 0);
+    }
 }
 
 void
-VC1541::clearDisk()
+VC1541::moveHeadUp()
 {
-	int i;
-	for (i = 1; i <= 84; i++)
-		clearHalftrack(i);
-}
+    if (halftrack < 84) {
 
-void gcr_conv4(uint8_t *from, uint8_t *to)
-{
-const uint16_t gcr_table[16] = {
-	0x0a, 0x0b, 0x12, 0x13, 0x0e, 0x0f, 0x16, 0x17,
-	0x09, 0x19, 0x1a, 0x1b, 0x0d, 0x1d, 0x1e, 0x15
-};
-
-	uint16_t g;
-
-	g = (gcr_table[*from >> 4] << 5) | gcr_table[*from & 15];
-	*to++ = g >> 2;
-	*to = (g << 6) & 0xc0;
-	from++;
-
-	g = (gcr_table[*from >> 4] << 5) | gcr_table[*from & 15];
-	*to++ |= (g >> 4) & 0x3f;
-	*to = (g << 4) & 0xf0;
-	from++;
-
-	g = (gcr_table[*from >> 4] << 5) | gcr_table[*from & 15];
-	*to++ |= (g >> 6) & 0x0f;
-	*to = (g << 2) & 0xfc;
-	from++;
-
-	g = (gcr_table[*from >> 4] << 5) | gcr_table[*from & 15];
-	*to++ |= (g >> 8) & 0x03;
-	*to = g;
+        float position = (float)bitoffset / (float)disk.length.halftrack[halftrack];
+        halftrack++;
+        bitoffset = position * disk.length.halftrack[halftrack];
+         
+        // Make sure new bitoffset starts at the beginning of a new byte to keep fast loader happy
+        alignHead();
+        
+        debug(3, "Moving head up to halftrack %d (track %2.1f) bit accurate emulation: %s\n",
+              halftrack, (halftrack + 1) / 2.0, bitAccuracy ? "YES" : "NO");
+    }
+   
+    assert(disk.isValidDiskPositon(halftrack, bitoffset));
+    
+    c64->putMessage(MSG_VC1541_HEAD, 1);
+    if (halftrack % 2 && sendSoundMessages)
+        c64->putMessage(MSG_VC1541_HEAD_SOUND, 1); // play sound for full tracks, only
 }
 
 void
-VC1541::encodeGcr(uint8_t b1, uint8_t b2, uint8_t b3, uint8_t b4, uint8_t *dest)
+VC1541::moveHeadDown()
 {
-	const uint16_t gcr[16] = { 
-		0x0a, 0x0b, 0x12, 0x13, 0x0e, 0x0f, 0x16, 0x17, 0x09, 0x19, 0x1a, 0x1b, 0x0d, 0x1d, 0x1e, 0x15 
-	};
-	uint16_t shift_reg;
+    if (halftrack > 1) {
+        float position = (float)bitoffset / (float)disk.length.halftrack[halftrack];
+        halftrack--;
+        bitoffset = position * disk.length.halftrack[halftrack];
 
-	// shift in first data byte
-	shift_reg = 0;	
-	shift_reg |= gcr[b1 >> 4];
-	shift_reg <<= 5;
-	shift_reg |= gcr[b1 & 0x0F];
-	dest[0] = (shift_reg >> 2) & 0xFF;
-	
-	// shift in second data byte
-	shift_reg <<= 5;	
-	shift_reg |= gcr[b2 >> 4];
-	shift_reg <<= 5;
-	shift_reg |= gcr[b2 & 0x0F];
-	dest[1] = (shift_reg >> 4) & 0xFF;
-
-	// shift in third data byte
-	shift_reg <<= 5;	
-	shift_reg |= gcr[b3 >> 4];
-	shift_reg <<= 5;
-	shift_reg |= gcr[b3 & 0x0F];
-	dest[2] = (shift_reg >> 6) & 0xFF;
-
-	// shift in fourth data byte
-	shift_reg <<= 5;	
-	shift_reg |= gcr[b4 >> 4];
-	shift_reg <<= 5;
-	shift_reg |= gcr[b4 & 0x0F];
-	dest[3] = (shift_reg >> 8) & 0xFF;
-	dest[4] = shift_reg & 0xFF;
+        // Make sure new bitoffset starts at the beginning of a new byte to keep fast loader happy
+        alignHead();
+        
+        debug(3, "Moving head down to halftrack %d (track %2.1f) bit accurate emulation: %s\n",
+              halftrack, (halftrack + 1) / 2.0, bitAccuracy ? "YES" : "NO");
+    }
+    
+    assert(disk.isValidDiskPositon(halftrack, bitoffset));
+    
+    c64->putMessage(MSG_VC1541_HEAD, 0);
+    if (halftrack % 2 && sendSoundMessages)
+        c64->putMessage(MSG_VC1541_HEAD_SOUND, 0); // play sound for full tracks, only
 }
 
-int 
-VC1541::encodeSector(D64Archive *a, uint8_t halftrack, uint8_t sector, uint8_t *dest, int gap)
+void
+VC1541::setBitAccuracy(bool b)
 {
-	int i;
-	uint8_t *source, *ptr = dest;
-	uint8_t id_lo, id_hi, checksum;
-	uint8_t track = (halftrack + 1) / 2;
-		
-	assert(a != NULL);
-	assert(ptr != NULL);
-	assert(1 <= track && track <= 42);
-	
-	if ((source = a->findSector(halftrack, sector)) == 0) {
-		warn("Can't encode halftrack. Not supported by the D64 format.\n");
-		return 0;
-	}
-	debug(2, "Encoding track %d, sector %d\n", track, sector);
-
-	// Get disk id and compute checksum
-	id_lo = a->diskIdLow();
-	id_hi = a->diskIdHi();
-	checksum = id_lo ^ id_hi ^ track ^ sector;
-	
-	// Write SYNC mark
-	for (i = 0; i < 6; i++, ptr++)
-		*ptr = 0xFF;
-		
-	// Write magic byte (header mark), checksum, sector and track
-	encodeGcr(0x08, checksum, sector, track, ptr);
-	ptr += 5;
-	
-	// Write id lo, id hi, 0x0F, 0x0F
-	encodeGcr(id_lo, id_hi, 0x0F, 0x0F, ptr);
-	ptr += 5;
-	
-	// Write gap (9 x 0x55)
-	for (i = 0; i < 9; i++, ptr++)
-		*ptr = 0x55;
-
-	// Write SYNC mark
-	for (i = 0; i < 6; i++, ptr++)
-		*ptr = 0xFF;
-
-	// Compute data checksum 
-	checksum = source[0];
-	for (i = 1; i < 256; i++)
-		checksum ^= source[i];
-		
-	// Write magic byte (data mark), first three data bytes
-	encodeGcr(0x07, source[0], source[1], source[2], ptr);
-	ptr += 5;
-	
-	// Write chunks of data
-	for (i = 3; i < 255; i += 4) {
-		encodeGcr(source[i], source[i+1], source[i+2], source[i+3], ptr);
-		ptr += 5;
-	}
-	assert(i == 255);
-	
-	// Write last byte, checksum, 0x00, 0x00
-	encodeGcr(source[255], checksum, 0, 0, ptr);
-	ptr += 5;
-	
-	// Write gap
-	for (i = 0; i < gap; i++, ptr++)
-		*ptr = 0x55;
-	
-	// returns number of encoded bytes
-	return ptr - dest;
+    bitAccuracy = b;
+    
+    if (!b) { // If bit accuracy is disabled, ...
+        
+        // we align the drive head to the beginning of a byte
+        alignHead();
+        
+        // and write-protect the disk.
+        disk.setWriteProtection(true);
+    }
 }
 
-void 
-VC1541::insertDisc(Archive *a)
+void
+VC1541::insertDisk(Archive *a)
 {
-	warn("Can only mount D64 images.\n");
-}
-
-void 
-VC1541::insertDisc(D64Archive *a)
-{
-	unsigned i,j;
-	uint8_t *dest;
-	
-	assert(a != NULL);
-
-	ejectDisc();
-	
-	// For each full track...
-	for (i = 1; i <= 2*a->numberOfTracks(); i += 2) {
-		// For each sector...
-		int gap =  (7928 - (a->numberOfSectors(i) * 356)) / a->numberOfSectors(i);
-		for (j = 0, dest = data[i-1]; j < a->numberOfSectors(i); j++) {
-			dest += encodeSector(a, i, j, dest, gap);
-		}
-
-		length[i-1] = dest - data[i-1];
-		debug(2, "Length of track %d: %d bytes\n", i, dest - data[i-1]); 
-	}
-
-	for (i = 1; i <= 84; i++) {
-		assert(length[i-1] <= 7928);
-	}
-
+    assert(a != NULL);
+    
+    D64Archive *d64 = (D64Archive *)a;
+    G64Archive *g64 = (G64Archive *)a;
+    
+    switch (a->getType()) {
+            
+        case D64_CONTAINER:
+            
+            ejectDisk();
+            disk.encodeArchive(d64);
+            break;
+            
+        case G64_CONTAINER:
+            
+            ejectDisk();
+            disk.encodeArchive(g64);
+            break;
+            
+        default:
+            
+            warn("Only D64 or G64 archives can be mounted as virtual disk.");
+            return;
+    }
+    
     diskInserted = true;
-	c64->putMessage(MSG_VC1541_DISC, 1);
+    c64->putMessage(MSG_VC1541_DISK, 1);
+    if (sendSoundMessages)
+        c64->putMessage(MSG_VC1541_DISK_SOUND, 1);
+
+    // If bit accuracy is disabled, we write-protect the disk
+    disk.setWriteProtection(true);
 }
 
 void 
-VC1541::ejectDisc()
+VC1541::ejectDisk()
 {
-	// Open lid (write protection light barrier will be blocked)
-	setWriteProtection(true);
+    if (!hasDisk())
+        return;
+    
+	// Open lid (this blocks the light barrier)
+    setDiskPartiallyInserted(true);
 
-	// Drive will notice the change in its interrupt routine...
+	// Let the drive notice the blocked light barrier in its interrupt routine ...
 	sleepMicrosec((uint64_t)200000);
-	
-	// Remove disk (write protection light barrier is no longer blocked)
-	setWriteProtection(false);
+
+    // Erase disk data and reset write protection flag
+    resetDisk();
+
+	// Remove disk (this unblocks the light barrier)
+	setDiskPartiallyInserted(false);
 		
-	// Zero out disk data
-	clearDisk();
-	
-    diskInserted = false;
-	c64->putMessage(MSG_VC1541_DISC, 0);
-}
-			
-void 
-VC1541::dumpTrack(int t)
-{	
-	if (t < 0) t = track;
-
-	int min = offset - 40, max = offset + 20;
-	if (min < 0) min = 0;
-	if (max > length[t]) max = length[t];
-	
-	debug(1, "Dumping track %d (length = %d)\n", t, length[t]);
-	for (int i = min; i < offset; i++)
-		debug(1, "%02X ", data[t][i]);
-	debug(1, "(%02X) ", data[t][offset]);
-	for (int i = offset+1; i < max; i++)
-		debug(1, "%02X ", data[t][i]);
-	debug(1, "\n");
+    // Notify listener
+	c64->putMessage(MSG_VC1541_DISK, 0);
+    if (sendSoundMessages)
+        c64->putMessage(MSG_VC1541_DISK_SOUND, 0);
 }
 
-void 
-VC1541::dumpFullTrack(int t)
-{		
-	if (t < 0) t = track;
-	
-	debug(1, "Dumping track %d (length = %d)\n", t, length[t]);
-	for (int i = 0; i < offset; i++)
-		debug(1, "%02X ", data[t][i]);
-	debug(1, "(%02X) ", data[t][offset]);
-	for (int i = offset+1; i < length[t]; i++)
-		debug(1, "%02X ", data[t][i]);
-	debug(1, "\n");
-}
-
-bool 
-VC1541::isG64Image(const char *filename)
+bool
+VC1541::exportToD64(const char *filename)
 {
-	int magic_bytes[] = { 0x47, 0x43, 0x52, 0x2D, 0x31, 0x35, 0x34, 0x31, EOF };
-
-	assert(filename != NULL);
-	
-	if (!checkFileSuffix(filename, ".G64") && !checkFileSuffix(filename, ".g64"))
-		return false;
-		
-	if (!checkFileHeader(filename, magic_bytes))
-		return false;
-		
-	return true;
+    D64Archive *archive;
+    
+    assert(filename != NULL);
+    
+    // Create archive
+    if ((archive = D64Archive::archiveFromDrive(this)) == NULL)
+        return false;
+    
+    // Write archive to disk
+    archive->writeToFile(filename);
+    
+    delete archive;
+    return true;
 }
 
-bool 
-VC1541::readG64Image(const char *filename)
+void
+VC1541::fastLoaderRead()
 {
-	struct stat fileProperties;
-	FILE *file;
-	uint8_t *filedata;
-	int size, c, track;
-	
-	assert (filename != NULL);
-		
-	// Get file properties
-    if (stat(filename, &fileProperties) != 0) {
-		// Could not open file...
-		return false;
-	}
-	
-	// Open file
-	if (!(file = fopen(filename, "r"))) {
-		// Can't open for read (Huh?)
-		return false;
-	}
-
-	// Allocate memory
-	if ((filedata = (uint8_t *)malloc(fileProperties.st_size)) == NULL) {
-		// Didn't get enough memory
-		return false;
-	}
-		
-	// Read data
-	size = 0;
-	c = fgetc(file);
-	while(c != EOF) {
-		filedata[size++] = (uint8_t)c;
-		c = fgetc(file);
-	}
-	fclose(file);			
-	debug(1, "G64 image imported successfully (%d bytes total, size = %d)\n", fileProperties.st_size, size);
-
-	// Analyze data
-	debug(1, "    Version: %2X\n", (int)filedata[0x08]);
-	debug(1, "    Number of tracks: %d\n", (int)filedata[0x09]);
-	debug(1, "    Size of track: %d\n", (int)((filedata[0x0B] << 8) | filedata[0x0A]));
-	for (track = 0; track < 84; track++) {
-		uint32_t offset;
-		uint16_t track_length, i;
-		
-		offset  = (filedata[4*track+0x0F] << 24) | (filedata[4*track+0x0E] << 16) | (filedata[4*track+0x0D] << 8) | filedata[4*track + 0x0C];
-		track_length = (filedata[offset + 1] << 8) | filedata[offset];
-
-		if (offset != 0) {
-			debug(1, "    Track %2.1f: Offset: %8X Length: %04X\n", (track + 2) / 2.0, offset, track_length);
-		}
-		
-		// copy data
-		if (offset) {
-			for (i = 0; i < track_length; i++)
-				data[track][i] = filedata[offset + 2 + i];
-			length[track] = track_length;
-		} else {
-			for (i = 0; i < 7928; i++)
-				data[track][i] = 0;
-			length[track] = 7928;
-		}
-	}
-	
-	free(filedata);
-	return true;
+    uint8_t byteUnderHead = readByteFromHead();
+    byteReady(byteUnderHead);
+    
+    if (byteUnderHead == 0xFF) {
+        fastLoaderSkipSyncMark(); // If we're inside a SYNC mark, proceed to next data byte
+    } else {
+        rotateDiskByOneByte(); // If we're outside a SYNC mark, the next data byte is just one byte ahead
+    }
 }
 
-
+bool
+VC1541::getFastLoaderSync()
+{
+    uint8_t byteUnderHead = readByteFromHead();
+    rotateDiskByOneByte();
+    return byteUnderHead == 0xFF;
+}
