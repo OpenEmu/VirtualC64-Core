@@ -34,89 +34,6 @@
 
 #define SOUNDBUFFERSIZE 2048
 
-typedef struct
-{
-    NSUInteger hidCode;
-    int rowBit;
-    int columnBit;
-} _VirtualKeyCodeTriplet;
-
-static const _VirtualKeyCodeTriplet _VirtualKeyCodesTable[] = {
-    { kHIDUsage_Keyboard0                  , 4 , 3 },
-    { kHIDUsage_Keyboard1                  , 7 , 0 },
-    { kHIDUsage_Keyboard2                  , 7 , 3 },
-    { kHIDUsage_Keyboard3                  , 1 , 0 },
-    { kHIDUsage_Keyboard4                  , 1 , 3 },
-    { kHIDUsage_Keyboard5                  , 2 , 0 },
-    { kHIDUsage_Keyboard6                  , 2 , 3 },
-    { kHIDUsage_Keyboard7                  , 3 , 0 },
-    { kHIDUsage_Keyboard8                  , 3 , 3 },
-    { kHIDUsage_Keyboard9                  , 4 , 0 },
-    { kHIDUsage_Keyboard0                  , 4 , 3 },
-    { kHIDUsage_KeyboardA                  , 1 , 2 },
-    { kHIDUsage_KeyboardB                  , 3 , 4 },
-    { kHIDUsage_KeyboardC                  , 2 , 4 },
-    { kHIDUsage_KeyboardD                  , 2 , 2 },
-    { kHIDUsage_KeyboardE                  , 1 , 6 },
-    { kHIDUsage_KeyboardF                  , 2 , 5 },
-    { kHIDUsage_KeyboardG                  , 3 , 2 },
-    { kHIDUsage_KeyboardH                  , 3 , 5 },
-    { kHIDUsage_KeyboardI                  , 4 , 1 },
-    { kHIDUsage_KeyboardJ                  , 4 , 2 },
-    { kHIDUsage_KeyboardK                  , 4 , 5 },
-    { kHIDUsage_KeyboardL                  , 5 , 2 },
-    { kHIDUsage_KeyboardM                  , 4 , 4 },
-    { kHIDUsage_KeyboardN                  , 4 , 7 },
-    { kHIDUsage_KeyboardO                  , 4 , 6 },
-    { kHIDUsage_KeyboardP                  , 5 , 1 },
-    { kHIDUsage_KeyboardQ                  , 7 , 6 },
-    { kHIDUsage_KeyboardR                  , 2 , 1 },
-    { kHIDUsage_KeyboardS                  , 1 , 5 },
-    { kHIDUsage_KeyboardT                  , 2 , 6 },
-    { kHIDUsage_KeyboardU                  , 3 , 6 },
-    { kHIDUsage_KeyboardV                  , 3 , 7 },
-    { kHIDUsage_KeyboardW                  , 1 , 1 },
-    { kHIDUsage_KeyboardX                  , 2 , 7 },
-    { kHIDUsage_KeyboardY                  , 3 , 1 },
-    { kHIDUsage_KeyboardZ                  , 1 , 4 },
-    { kHIDUsage_KeyboardGraveAccentAndTilde, 7 , 1 }, // Grave Accent and Tilde
-    { kHIDUsage_KeyboardHyphen             , 5 , 3 }, // - or _
-    { kHIDUsage_KeyboardEqualSign          , 6 , 5 }, // = or +
-    { kHIDUsage_KeyboardQuote              , 6 , 2 }, // ' or "
-//    { kHIDUsage_KeyboardOpenBracket        , kVK_ANSI_LeftBracket   , nil          }, // [ or {
-//    { kHIDUsage_KeyboardCloseBracket       , kVK_ANSI_RightBracket  , nil          }, // ] or }
-    { kHIDUsage_KeyboardBackslash          , 5 , 0 }, // \ or |
-    { kHIDUsage_KeyboardSemicolon          , 5 , 5 }, // ; or :
-    { kHIDUsage_KeyboardComma              , 5 , 7 }, // , or <
-    { kHIDUsage_KeyboardPeriod             , 5 , 4 }, // . or >
-    { kHIDUsage_KeyboardSlash              , 6 , 7 }, // / or ?
-    { kHIDUsage_KeyboardReturnOrEnter      , 0 , 1 },
-//    { kHIDUsage_KeyboardTab                , kVK_Tab                , @"⇥"         },
-    { kHIDUsage_KeyboardSpacebar           , 7 , 4 },
-    { kHIDUsage_KeyboardDeleteOrBackspace  , 0 , 0 },
-//    { kHIDUsage_KeyboardEscape             , kVK_Escape             , @"⎋"         },
-    { kHIDUsage_KeyboardLeftShift          , 1 , 7 },
-//    { kHIDUsage_KeyboardCapsLock           , kVK_CapsLock           , @"Caps Lock" },
-    { kHIDUsage_KeyboardLeftAlt            , 7 , 5 }, // Commodore key (ALT)
-    { kHIDUsage_KeyboardLeftControl        , 7 , 2 },
-    { kHIDUsage_KeyboardRightShift         , 6 , 4 },
-    { kHIDUsage_KeyboardRightAlt           , 7 , 5 }, // Commodore key (ALT)
-    { kHIDUsage_KeyboardF1                 , 0 , 4 },
-    //{ kHIDUsage_KeyboardF2                 , kVK_F2 , @"F2" },
-    { kHIDUsage_KeyboardF3                 , 0 , 5 },
-    //{ kHIDUsage_KeyboardF4                 , kVK_F4 , @"F4" },
-    { kHIDUsage_KeyboardF5                 , 0 , 6 },
-    //{ kHIDUsage_KeyboardF6                 , kVK_F6 , @"F6" },
-    { kHIDUsage_KeyboardF7                 , 0 , 3 },
-    //{ kHIDUsage_KeyboardF8                 , kVK_F8 , @"F8" },
-    { kHIDUsage_KeyboardLeftArrow          , 0 , 2 },
-//    { kHIDUsage_KeyboardRightArrow         , kVK_RightArrow         , @"→"         },
-//    { kHIDUsage_KeyboardDownArrow          , kVK_DownArrow          , @"↓"         },
-    { kHIDUsage_KeyboardUpArrow            , 0 , 7 },
-//    { kHIDUsage_KeyboardNonUSPound         , 0xFFFF                 , @"#"         },
-//    { kHIDUsage_KeyboardNonUSBackslash     , 0xFFFF                 , @"|"         },
-};
-
 @interface VC64GameCore () <OEC64SystemResponderClient>
 {
     C64 *c64;
@@ -126,10 +43,13 @@ static const _VirtualKeyCodeTriplet _VirtualKeyCodesTable[] = {
     BOOL      _didRUN;
 }
 
+- (int)translateKey:(char)key plainkey:(char)plainkey keycode:(short)keycode flags:(int)flags;
 - (void)pressKey:(char)c;
 - (void)releaseKey:(char)c;
 - (void)typeText:(NSString *)text;
 - (void)typeText:(NSString *)text withDelay:(int)delay;
+- (BOOL)isC64ReadyToRUN;
+- (BOOL)loadBIOSRoms;
 @end
 
 @implementation VC64GameCore
@@ -391,61 +311,91 @@ static const _VirtualKeyCodeTriplet _VirtualKeyCodesTable[] = {
 
 }
 
-- (oneway void)keyDown:(unsigned short)keyCode
+- (int)translateKey:(char)key plainkey:(char)plainkey keycode:(short)keycode flags:(int)flags
 {
-    // TODO: should be using NSEvent and Keyboard::pressKey instead
-    // TODO: support other C64 special keys and match up keyboard layout
+    switch (keycode) {
+        case kHIDUsage_KeyboardF1: return Keyboard::C64KEY_F1;
+        case kHIDUsage_KeyboardF2: return Keyboard::C64KEY_F2;
+        case kHIDUsage_KeyboardF3: return Keyboard::C64KEY_F3;
+        case kHIDUsage_KeyboardF4: return Keyboard::C64KEY_F4;
+        case kHIDUsage_KeyboardF5: return Keyboard::C64KEY_F5;
+        case kHIDUsage_KeyboardF6: return Keyboard::C64KEY_F6;
+        case kHIDUsage_KeyboardF7: return Keyboard::C64KEY_F7;
+        case kHIDUsage_KeyboardF8: return Keyboard::C64KEY_F8;
+        case kHIDUsage_KeyboardDeleteOrBackspace: return (flags & NSShiftKeyMask) ? Keyboard::C64KEY_INS : Keyboard::C64KEY_DEL;
+        case kHIDUsage_KeyboardReturnOrEnter: return Keyboard::C64KEY_RET;
+        case kHIDUsage_KeyboardLeftArrow: return Keyboard::C64KEY_CL;
+        case kHIDUsage_KeyboardRightArrow: return Keyboard::C64KEY_CR;
+        case kHIDUsage_KeyboardUpArrow: return Keyboard::C64KEY_CU;
+        case kHIDUsage_KeyboardDownArrow: return Keyboard::C64KEY_CD;
+        //case MAC_HAT: return '^';
+        //case MAC_TILDE_US: if (plainkey != '<' && plainkey != '>') return Keyboard::C64KEY_ARROW; else break;
+    }
 
-    // Do not accept input before RUN
-    if(!_didRUN)
-        return;
-
-    // Ignore keys that are already pressed
-    if (_pressedKeys[(unsigned char)keyCode])
-        return;
-
-    // Ignore command key
-    if(keyCode == kHIDUsage_KeyboardLeftGUI || keyCode == kHIDUsage_KeyboardRightGUI)
-        return;
-
-    // Translate key from HID to C64 keyboard matrix bits
-    for(int i = 0; i < sizeof(_VirtualKeyCodesTable) / sizeof(*_VirtualKeyCodesTable); ++i)
-    {
-        if(_VirtualKeyCodesTable[i].hidCode == keyCode)
-        {
-            // Press key
-            _pressedKeys[(unsigned char)keyCode] = keyCode;
-            c64->keyboard->pressKey(_VirtualKeyCodesTable[i].rowBit, _VirtualKeyCodesTable[i].columnBit);
-
-            break;
-        }
+    if (flags & NSAlternateKeyMask) {
+        // Commodore key (ALT) is pressed
+        return (int)plainkey | Keyboard::C64KEY_COMMODORE;
+    } else {
+        // No special translation needed here
+        return (int)key;
     }
 }
 
-- (oneway void)keyUp:(unsigned short)keyCode
+- (oneway void)keyDown:(unsigned short)keyHIDCode characters:(NSString *)characters charactersIgnoringModifiers:(NSString *)charactersIgnoringModifiers flags:(NSEventModifierFlags)modifierFlags
 {
-    // TODO: should be using NSEvent and Keyboard::releaseKey instead
-
     // Do not accept input before RUN
     if(!_didRUN)
         return;
 
-    // Only proceed if the released key is on the records
-    if (!_pressedKeys[(unsigned char)keyCode])
+    unsigned char  c       = [characters UTF8String][0];
+    unsigned char  c_unmod = [charactersIgnoringModifiers UTF8String][0];
+    unsigned short keycode = keyHIDCode;
+    unsigned int   flags   = modifierFlags;
+    int c64key;
+
+    // NSLog(@"keyDown: '%c' keycode: %02X flags: %08X", (char)c, keycode, flags);
+
+    // Ignore keys that are already pressed
+    if (_pressedKeys[(unsigned char)keycode])
         return;
 
-    // Translate key from HID to C64 keyboard matrix bits
-    for(int i = 0; i < sizeof(_VirtualKeyCodesTable) / sizeof(*_VirtualKeyCodesTable); ++i)
-    {
-        if(_VirtualKeyCodesTable[i].hidCode == keyCode)
-        {
-            // Release key
-            _pressedKeys[(unsigned char)keyCode] = 0;
-            c64->keyboard->releaseKey(_VirtualKeyCodesTable[i].rowBit, _VirtualKeyCodesTable[i].columnBit);
+    // Ignore command key
+    if (flags & NSCommandKeyMask)
+        return;
 
-            break;
-        }
-    }
+    // Remove alternate key modifier if present
+    if (flags & NSAlternateKeyMask)
+        c = [charactersIgnoringModifiers UTF8String][0];
+
+    // Translate key
+    if (!(c64key = [self translateKey:c plainkey:c_unmod keycode:keycode flags:flags]))
+        return;
+
+    // Press key
+    // NSLog(@"Storing key %c for keycode %ld",c64key, (long)keycode);
+    _pressedKeys[(unsigned char)keycode] = c64key;
+    c64->keyboard->pressKey(c64key);
+}
+
+- (oneway void)keyUp:(unsigned short)keyHIDCode characters:(NSString *)characters charactersIgnoringModifiers:(NSString *)charactersIgnoringModifiers flags:(NSEventModifierFlags)modifierFlags
+{
+    // Do not accept input before RUN
+    if(!_didRUN)
+        return;
+
+    unsigned short keycode = keyHIDCode;
+    //unsigned int   flags   = modifierFlags;
+
+    // NSLog(@"keyUp: keycode: %02X flags: %08X", keycode, flags);
+
+    // Only proceed if the released key is on the records
+    if (!_pressedKeys[(unsigned char)keycode])
+        return;
+
+    // Release key
+    // NSLog(@"Releasing stored key %c for keycode %ld",pressedKeys[keycode], (long)keycode);
+    c64->keyboard->releaseKey(_pressedKeys[keycode]);
+    _pressedKeys[(unsigned char)keycode] = 0;
 }
 
 - (oneway void)didPushC64Button:(OEC64Button)button forPlayer:(NSUInteger)player;
