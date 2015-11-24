@@ -434,23 +434,23 @@
     // Get The 4 BIOS ROMs
 
     // BASIC ROM
-    NSString *basicROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"Basic.rom"];
+    NSString *basicROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"basic.901226-01.bin"];
     if(!c64->mem->isBasicRom([basicROM UTF8String]))
     {
         NSLog(@"VirtualC64: %@ is not a valid Basic ROM!", basicROM);
         return NO;
     }
 
-    // Kernel ROM
-    NSString *kernelROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"Kernel.rom"];
+    // "Kernal" ROM
+    NSString *kernelROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"kernal.901227-03.bin"];
     if(!c64->mem->isKernelRom([kernelROM UTF8String]))
     {
-        NSLog(@"VirtualC64: %@ is not a valid Kernel ROM!", kernelROM);
+        NSLog(@"VirtualC64: %@ is not a valid Kernal ROM!", kernelROM);
         return NO;
     }
 
     // Char ROM
-    NSString *charROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"Char.rom"];
+    NSString *charROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"characters.901225-01.bin"];
     if(!c64->mem->isCharRom([charROM UTF8String]))
     {
         NSLog(@"VirtualC64: %@ is not a valid Char ROM!", charROM);
@@ -458,7 +458,7 @@
     }
 
     // C1541 aka Floppy ROM
-    NSString *C1541ROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"C1541.rom"];
+    NSString *C1541ROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"1541-II.355640-01.bin"];
 
     // Load Basic, Kernel, Char and C1541 Floppy ROMs
     c64->loadRom([basicROM UTF8String]);

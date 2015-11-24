@@ -22,6 +22,57 @@
 	<string>OEGameCoreController</string>
 	<key>OEGameCoreClass</key>
 	<string>VC64GameCore</string>
+	<key>OEGameCoreOptions</key>
+	<dict>
+		<key>openemu.system.c64</key>
+		<dict>
+			<key>OEGameCoreRequiresFiles</key>
+			<true/>
+			<key>OERequiredFiles</key>
+			<array>
+				<dict>
+					<key>Description</key>
+					<string>Commodore 64 BASIC v2 ROM</string>
+					<key>MD5</key>
+					<string>57af4ae21d4b705c2991d98ed5c1f7b8</string>
+					<key>Name</key>
+					<string>basic.901226-01.bin</string>
+					<key>Size</key>
+					<integer>8192</integer>
+				</dict>
+				<dict>
+					<key>Description</key>
+					<string>Commodore 64 Character ROM</string>
+					<key>MD5</key>
+					<string>12a4202f5331d45af846af6c58fba946</string>
+					<key>Name</key>
+					<string>characters.901225-01.bin</string>
+					<key>Size</key>
+					<integer>4096</integer>
+				</dict>
+				<dict>
+					<key>Description</key>
+					<string>Commodore 64 1541-II Floppy Disk Drive ROM</string>
+					<key>MD5</key>
+					<string>a0ce8439d1b8dcf2e1430461f7233a72</string>
+					<key>Name</key>
+					<string>1541-II.355640-01.bin</string>
+					<key>Size</key>
+					<integer>16384</integer>
+				</dict>
+				<dict>
+					<key>Description</key>
+					<string>Commodore 64 KERNAL rev. 3 ROM</string>
+					<key>MD5</key>
+					<string>39065497630802346bce17963f13c092</string>
+					<key>Name</key>
+					<string>kernal.901227-03.bin</string>
+					<key>Size</key>
+					<integer>8192</integer>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>OEGameCorePlayerCount</key>
 	<string>2</string>
 	<key>OEProjectURL</key>
