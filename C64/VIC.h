@@ -172,7 +172,7 @@ private:
            Second phase (HIGH): CPU gets access to the bus
        In rare cases, VIC needs access in the HIGH phase, too. To block the CPU, the BA line is pulled down.
        Note: The BA line can be pulled down by multiple sources (wired AND). */
-	uint16_t BAlow;
+    uint16_t BAlow;
 	
     //! Remember at which cycle BA line has been pulled down
     uint64_t BAwentLowAtCycle;
@@ -236,18 +236,20 @@ private:
     /*  "Das vertikale Rahmenflipflop dient zur Unterstützung bei der Darstellung
          des oberen/unteren Rahmens. Ist es gesetzt, kann das Haupt-Rahmenflipflop
          nicht gelöscht werden." [C.B.] */
-    inline void clearMainFrameFF() { if (!verticalFrameFF) mainFrameFF = false; }
+    inline void clearMainFrameFF() { if (!verticalFrameFF && !verticalFrameFFsetCond) mainFrameFF = false; }
      
     
 	// -----------------------------------------------------------------------------------------------
 	//                              I/O memory handling and RAM access
 	// -----------------------------------------------------------------------------------------------
 
-private:
+public:
 	
 	//! I/O Memory
 	/*! If a value is poked to the VIC address space, it is stored here. */
 	uint8_t iomem[64]; 
+
+private:
 
     //! Start address of the currently selected memory bank
     /*! There are four banks in total since the VIC chip can only "see" 16 KB of memory at one time
@@ -311,7 +313,7 @@ private:
     
     //! Display mode grabbed in gAccess()
     DisplayMode g_mode;
-    
+
     
     // -----------------------------------------------------------------------------------------------
     //                             Sprite accesses (pAccess and sAccess)
@@ -320,17 +322,27 @@ private:
     //! Sprite pointer access
     void pAccess(int sprite);
     
-    //! First sprite data access
-    /*!  Returns true iff sprite data was fetched (a memory access has occurred) */
+    //! @brief  First sprite data access
+    /*! @result true iff sprite data was fetched (a memory access has occurred) */
     bool sFirstAccess(int sprite);
 
-    //! Second sprite data access
-    /*!  Returns true iff sprite data was fetched (a memory access has occurred) */
+    //! @brief  Second sprite data access
+    /*! @result Returns true iff sprite data was fetched (a memory access has occurred) */
     bool sSecondAccess(int sprite);
 
-    //! Third sprite data access
-    /*!  Returns true iff sprite data was fetched (a memory access has occurred) */
+    //! @brief  Third sprite data access
+    /*! @result Returns true iff sprite data was fetched (a memory access has occurred) */
     bool sThirdAccess(int sprite);
+
+    //! @brief      Finalizes the sprite data access
+    /*! @discussion This method is invoked one cycle after the second and third sprite DMA */
+    void sFinalize(int sprite);
+
+    //! @brief Bit i is set to 1 iff sprite i performs its first DMA in the current cycle
+    uint8_t isFirstDMAcycle;
+
+    //! @brief Bit i is set to 1 iff sprite i performs its second and third DMA in the current cycle
+    uint8_t isSecondDMAcycle;
 
     
     // -----------------------------------------------------------------------------------------------
@@ -359,19 +371,15 @@ private:
 	//! Sprite pointer
 	/*! Determines where the sprite data comes from */
 	uint16_t spritePtr[8];
-	
+
 	//! Sprite on off
 	/*! Determines if a sprite needs to be drawn in the current rasterline. Each bit represents a single sprite. */
 	uint8_t spriteOnOff;
-	
-	//! Previous value of spriteOnOff
-    //  DEPRECATED. WILL BE ELIMINATED WHEN SPRITE DRAWING IS CYCLE BASED
-	uint8_t oldSpriteOnOff; 
-	
+    
 	//! Sprite DMA on off
 	/*! Determines  if sprite dma access is enabled or disabled. Each bit represents a single sprite. */
 	uint8_t spriteDmaOnOff;
-	
+
 	//! Expansion flipflop
 	/*! Used to handle Y sprite stretching. One bit for each sprite */
 	uint8_t expansionFF;
@@ -657,10 +665,6 @@ private:
             yCounter >= 0x30 && yCounter <= 0xf7 /* [1] */ &&
             (yCounter & 0x07) == getVerticalRasterScroll() /* [2] */ &&
             DENwasSetInRasterline30 /* [3] */;
-
-         // OLD CODE: UPDATE OF DISPLAY STATE IS TOO EARLY. NEEDS TO BE DONE AT THE END OF EACH CYCLE
-         // if (badLineCondition)
-         //    displayState = true;
      }
     
     //! Update display state
@@ -671,7 +675,7 @@ private:
     }
     
     //! Set BA line
-    void setBAlow(bool value);
+    void setBAlow(uint8_t value);
 	
 	//! Trigger a VIC interrupt
 	/*! VIC interrupts can be triggered from multiple sources. Each one is associated with a specific bit */
@@ -731,12 +735,14 @@ private:
     
     //! Turn on sprite display bit if conditions are met
     /*! In cycle 58, drawing is switched on for all sprites that got dma access switched on in 
-        cycle 55 or 56. */
-    void turnSpriteDisplayOn();
+        cycle 55 or 56. 
+        DEPRECATED */
+    // void turnSpriteDisplayOn();
 
     //! Turn off sprite display bit if conditions are met
-    /*! In cycle 58, drawing is switched off for all sprites that lost dma access in cycle 16. */
-    void turnSpriteDisplayOff();
+    /*! In cycle 58, drawing is switched off for all sprites that lost dma access in cycle 16. 
+        DEPRECATED*/
+    // void turnSpriteDisplayOff();
     
 	//! Get sprite depth
 	/*! The value is written to the z buffer to resolve overlapping pixels */
@@ -769,6 +775,12 @@ public:
 	//! Set Y coordinate of sprite
 	inline void setSpriteY(uint8_t nr, int y) { if (y < 256) { poke(1+2*nr, y);} }
 	
+    //! Compare Y coordinate of all sprites with 8 bit value
+    inline uint8_t compareSpriteY(uint8_t y) { return
+        ((iomem[1] == y) << 0) | ((iomem[3] == y) << 1) | ((iomem[5] == y) << 2) | ((iomem[7] == y) << 3) |
+        ((iomem[9] == y) << 4) | ((iomem[11] == y) << 5) | ((iomem[13] == y) << 6) | ((iomem[15] == y) << 7);
+    }
+    
 	//! Returns true, if sprite is enabled (drawn on the screen)
 	inline bool spriteIsEnabled(uint8_t nr) { return iomem[0x15] & (1 << nr); }		
 

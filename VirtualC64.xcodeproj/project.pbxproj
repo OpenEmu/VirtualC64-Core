@@ -36,6 +36,7 @@
 
 /* Begin PBXBuildFile section */
 		82EC40A30FD9EC5A0017FC19 /* VC64GameCore.mm in Sources */ = {isa = PBXBuildFile; fileRef = B5008DAE0E8BFB3E005AECAF /* VC64GameCore.mm */; };
+		8706C3D81C2FA1AC000C2893 /* NIBArchive.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8706C3D61C2FA1AC000C2893 /* NIBArchive.cpp */; };
 		8745D7621BFBD56C005E8699 /* _version.cc in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7611BFBD56C005E8699 /* _version.cc */; };
 		8745D7691BFBD59E005E8699 /* Datasette.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7631BFBD59E005E8699 /* Datasette.cpp */; };
 		8745D76A1BFBD59E005E8699 /* Disk525.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7651BFBD59E005E8699 /* Disk525.cpp */; };
@@ -128,6 +129,8 @@
 		089C167EFE841241C02AAC07 /* English */ = {isa = PBXFileReference; fileEncoding = 10; lastKnownFileType = text.plist.strings; name = English; path = English.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		089C167FFE841241C02AAC07 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
 		1058C7ADFEA557BF11CA2CBB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
+		8706C3D61C2FA1AC000C2893 /* NIBArchive.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = NIBArchive.cpp; sourceTree = "<group>"; };
+		8706C3D71C2FA1AC000C2893 /* NIBArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NIBArchive.h; sourceTree = "<group>"; };
 		8745D7601BFBD56C005E8699 /* _spline.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _spline.h; sourceTree = "<group>"; };
 		8745D7611BFBD56C005E8699 /* _version.cc */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = _version.cc; sourceTree = "<group>"; };
 		8745D7631BFBD59E005E8699 /* Datasette.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Datasette.cpp; sourceTree = "<group>"; };
@@ -362,6 +365,8 @@
 				EB03DCD116FE194000CF0752 /* Memory.h */,
 				EB03DCD216FE194000CF0752 /* Message.cpp */,
 				EB03DCD316FE194000CF0752 /* Message.h */,
+				8706C3D61C2FA1AC000C2893 /* NIBArchive.cpp */,
+				8706C3D71C2FA1AC000C2893 /* NIBArchive.h */,
 				EB03DCD416FE194000CF0752 /* OldSID.cpp */,
 				EB03DCD516FE194000CF0752 /* OldSID.h */,
 				EB03DCD616FE194000CF0752 /* P00Archive.cpp */,
@@ -570,6 +575,7 @@
 				EB03DD3016FE194000CF0752 /* wave8580_PST.cc in Sources */,
 				EB03DD3116FE194000CF0752 /* ReSID.cpp in Sources */,
 				EB03DD3216FE194000CF0752 /* SIDVoice.cpp in Sources */,
+				8706C3D81C2FA1AC000C2893 /* NIBArchive.cpp in Sources */,
 				EB03DD3316FE194000CF0752 /* SIDWrapper.cpp in Sources */,
 				EB03DD3416FE194000CF0752 /* Snapshot.cpp in Sources */,
 				EB03DD3516FE194000CF0752 /* T64Archive.cpp in Sources */,
