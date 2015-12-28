@@ -131,6 +131,7 @@
 		1058C7ADFEA557BF11CA2CBB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
 		8706C3D61C2FA1AC000C2893 /* NIBArchive.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = NIBArchive.cpp; sourceTree = "<group>"; };
 		8706C3D71C2FA1AC000C2893 /* NIBArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NIBArchive.h; sourceTree = "<group>"; };
+		8706C3D91C30C557000C2893 /* VIC_globals.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VIC_globals.h; sourceTree = "<group>"; };
 		8745D7601BFBD56C005E8699 /* _spline.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _spline.h; sourceTree = "<group>"; };
 		8745D7611BFBD56C005E8699 /* _version.cc */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = _version.cc; sourceTree = "<group>"; };
 		8745D7631BFBD59E005E8699 /* Datasette.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Datasette.cpp; sourceTree = "<group>"; };
@@ -145,7 +146,6 @@
 		8745D7701BFBD5FD005E8699 /* PixelEngine.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PixelEngine.h; sourceTree = "<group>"; };
 		8745D7721BFBD665005E8699 /* TAPArchive.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = TAPArchive.cpp; sourceTree = "<group>"; };
 		8745D7731BFBD665005E8699 /* TAPArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TAPArchive.h; sourceTree = "<group>"; };
-		8745D7751BFBD68F005E8699 /* VIC_constants.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VIC_constants.h; sourceTree = "<group>"; };
 		87FBC0891BFC780500AECF5A /* OEC64SystemResponderClient.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OEC64SystemResponderClient.h; path = "../OpenEmu/Commodore 64/OEC64SystemResponderClient.h"; sourceTree = "<group>"; };
 		8D5B49B6048680CD000E48DA /* VirtualC64.oecoreplugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VirtualC64.oecoreplugin; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D5B49B7048680CD000E48DA /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -396,7 +396,7 @@
 				EB03DD0416FE194000CF0752 /* VC1541Memory.h */,
 				EB03DD0616FE194000CF0752 /* VIA6522.cpp */,
 				EB03DD0716FE194000CF0752 /* VIA6522.h */,
-				8745D7751BFBD68F005E8699 /* VIC_constants.h */,
+				8706C3D91C30C557000C2893 /* VIC_globals.h */,
 				EB03DD0816FE194000CF0752 /* VIC.cpp */,
 				EB03DD0916FE194000CF0752 /* VIC.h */,
 				EB03DD0B16FE194000CF0752 /* VirtualComponent.cpp */,

@@ -15,21 +15,12 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// VERSION 1.4:
+// VERSION 1.4.1:
 // ENHANCEMENTS:
 //
-// This release contains important VIC II compatibility improvements. Demo "Deus ex Machina" by Crest and Oxyron (2000)
-// runs rather flawlessly now. Furthermore, VirtualC64 now passes VICE tests spriteenable1, spriteenable3 (mostly),
-// spriteenable4, and sprite0move.
-//
-// VirtualC64 can now read NIB image files. Please note that a lot of floppy disks provided in NIB format
-// contain copy protection mechanisms which are likly to be incompatible with the current drive emulation.
-//
-// BUGFIXES:
-//
-// Fixed a bug that prevented the synchronization timer to stabalize in some situations.
-// Starting with V0.9.9.3, VirtualC64 was no longer able to read in T64 files created by CONV64 as these files
-// contain corrupt header information. Such files can be read again.
+// Applied some speed optimizations to the new VIC code. At maximum speed, the
+// emulator is up to 10% faster now.
+// In the debug menu, option "Hide sprites" was broken. This has been fixed. 
 //
 // TODO:
 // Add subtext "xx Tracks", "Type 0 tape" to Media Dialog
@@ -46,7 +37,6 @@
 // 2. Add routine to quickly get the disk name from GCR data
 //    Right now, the hardware dialog takes some time to open
 //
-//
 // ENHANCEMENTS (BRAIN STORMING):
 //
 // 1. Upscaler (like superEagle)
@@ -62,7 +52,7 @@
 // Snapshot version number of this release
 #define V_MAJOR 1
 #define V_MINOR 4
-#define V_SUBMINOR 0
+#define V_SUBMINOR 1
 
 #include "basic.h"
 #include "VirtualComponent.h"

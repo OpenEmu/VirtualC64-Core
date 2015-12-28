@@ -20,7 +20,7 @@
 #define _PIXELENGINGE_INC
 
 #include "VirtualComponent.h"
-#include "VIC_constants.h"
+#include "VIC_globals.h"
 
 // Forward declarations
 class VIC;
@@ -72,15 +72,6 @@ public:
     //! Initialize both screenBuffers
     /*! This function is used for debugging. It write some recognizable pattern into both buffers */
     void resetScreenBuffers();
-
-    //! Size of internal state
-    uint32_t stateSize() { return 0; }
-    
-    //! Load state
-    void loadFromBuffer(uint8_t **buffer) { }
-    
-    //! Save state
-    void saveToBuffer(uint8_t **buffer) { }
 
     
     // -----------------------------------------------------------------------------------------------
@@ -157,16 +148,15 @@ private:
     //! Z buffer
     /*! Virtual VICII uses depth buffering to determine pixel priority. In the various render routines, a pixel is 
         only written to the screen buffer, if it is closer to the view point. The depth of the closest pixel is kept 
-        in the z buffer. The lower the value of the z buffer, the closer it is to the viewer.
-        The z buffer is cleared before a new rasterline is drawn. */
-    int zBuffer[NTSC_PIXELS];
+        in the z buffer. The lower the value of the z buffer, the closer it is to the viewer. */
+    int zBuffer[8];
     
     //! Indicates the source of a drawn pixel
     /*! Whenever a foreground pixel or sprite pixel is drawn, a distinct bit in the pixelSource array is set.
      *  The information is utilized to detect sprite-sprite and sprite-background collisions. */
-    int pixelSource[NTSC_PIXELS];
+    int pixelSource[8];
     
-    //! Offset into pixelBuffer, zBuffer, and pixelSource
+    //! Offset into pixelBuffer
     /*! Variable points to the first pixel of the currently drawn 8 pixel chunk */
     short bufferoffset;
     
@@ -188,7 +178,8 @@ private:
      *  drawn in cycle 14 (first left border column) and the last in cycle ?? (fourth right border column).
      */
     bool visibleColumn;
-     
+    
+    
     // -----------------------------------------------------------------------------------------------
     //                                    Execution functions
     // -----------------------------------------------------------------------------------------------
@@ -212,60 +203,36 @@ public:
     //                                   VIC state latching
     // -----------------------------------------------------------------------------------------------
 
+    //! Register pipe
+    PixelEnginePipe pipe;
+
+    //! Border color pipe
+    BorderColorPipe bpipe;
+    
+    //! Canvas color pipe
+    CanvasColorPipe cpipe;
+
+    //! Sprite color pipe
+    SpriteColorPipe spipe;
+
     //! Latched VIC state
     /*! To draw pixels right, it is important to gather the necessary information at the right time. 
         Some VIC and memory registers need to be looked up one cycle before drawing, others need
         to be looked up at the same cycle or even in the middle of drawing an 8 pixel chunk. To make
         this process transparent, all gatheres information is stored in this structure. */
 
+    // TODO: Introduce PixelEngineColorPipe
     struct {
-        // Updated one cycle before drawing (in VIC::reparePixelEngineForCycle)
-        uint32_t yCounter;
-        int16_t xCounter;
-        int16_t xCounterSprite;
-        bool verticalFrameFF;
-        bool mainFrameFF;
-        uint8_t data;
-        uint8_t character;
-        uint8_t color;
-        DisplayMode mode;
-        uint8_t delay;
-        uint16_t spriteX[8];
-        uint8_t spriteXexpand;
-
-        //
-        // Updated in the middle of a 8 pixel chunk (in drawCanvas)
-        uint8_t D011;
-        uint8_t D016;
-        
-        // Updated in the middle of a 8 pixel chunk (in drawCanvas via updateColorRegisters)
-        uint8_t borderColor;
-        uint8_t backgroundColor[4];
-
-        // Updated in WHEN(?) (in drawSprites via updateSpriteColorRegisters)
-        uint8_t spriteColor[8];
-        uint8_t spriteExtraColor1;
-        uint8_t spriteExtraColor2;
         uint8_t spriteOnOffPipe;
         uint8_t spriteOnOff;
 
     } dc;
-        
-    //! Latches portions of the VIC state
-    /*! Latches everything that needs to be recorded one cycle prior to drawing */
-    // void prepareForCycle(uint8_t cycle);
-
-    //! Latches the border color
-    /*! This needs to be done after the first border pixel has been drawn */
-    void updateBorderColorRegister();
-
-    //! Latches the four drawing colors
-    /*! This needs to be done after the first canvas pixel has been drawn */
-    void updateColorRegisters();
-
-    //! Latches the four sprite colors
-    /*! This needs to be done TODO:WHEN? */
-    void updateSpriteColorRegisters();
+    
+    //! Current display mode
+    /*! The display mode is determined by three bits (one in register 0xD016 and two in register 0xD011).
+     *  These bits don't show up simultaniously. They are latched in method drawCanvas() after
+     *  after certain pixels have been draw. */
+    uint8_t displayMode;
 
     //! @brief      Latches the sprite enable bits
     /*! @discussion This method is called in drawSprites() */
@@ -501,10 +468,6 @@ public:
 
     //! Draw a single frame pixel
     void setFramePixel(unsigned pixelnr, int rgba);
-        
-    //! Draw eight frame pixels in a row
-    // inline void setEightFramePixels(int rgba) {
-    //     for (unsigned i = 0; i < 8; i++) setFramePixel(i, rgba); }
     
     //! Draw a single foreground pixel
     void setForegroundPixel(unsigned pixelnr, int rgba);
@@ -517,7 +480,7 @@ public:
         for (unsigned i = 0; i < 8; i++) setBackgroundPixel(i, rgba); }
 
     //! Draw a single sprite pixel
-    void setSpritePixel(int offset, int rgba, int depth, int source);
+    void setSpritePixel(unsigned pixelnr, int rgba, int depth, int source);
 
     //! Extend border to the left and right to look nice.
     /*! This functions replicates the color of the leftmost and rightmost pixel */
