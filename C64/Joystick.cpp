@@ -21,16 +21,16 @@
 
 Joystick::Joystick() {
 
-    name = "Joystick";
-    debug(2, "    Creating joystick at address %p...\n", this);
+    setDescription("Joystick");
+    debug(3, "    Creating joystick at address %p...\n", this);
     
     // Register snapshot items
     SnapshotItem items[] = {
         
-        { &_buttonPressed,  sizeof(_buttonPressed), CLEAR_ON_RESET },
-        { &_axisX,          sizeof(_axisX),         CLEAR_ON_RESET },
-        { &_axisY,          sizeof(_axisY),         CLEAR_ON_RESET },
-        { NULL,             0,                      0 }};
+        { &button,  sizeof(button), 0 },
+        { &axisX,   sizeof(axisX),  0 },
+        { &axisY,   sizeof(axisY),  0 },
+        { NULL,     0,              0 }};
     
     registerSnapshotItems(items, sizeof(items));
 }
@@ -40,42 +40,20 @@ Joystick::~Joystick()
 }
 
 void
+Joystick::reset()
+{
+    VirtualComponent::reset();
+
+    button = false;
+    axisX = JOYSTICK_RELEASED;
+    axisY = JOYSTICK_RELEASED;
+}
+
+void
 Joystick::dumpState()
 {
     msg("Joystick port\n");
     msg("-------------\n");
-    msg("Button: %s AxisX: %d AxisY: %d\n", _buttonPressed ? "YES" : "NO", _axisX, _axisY);
+    msg("Button: %s AxisX: %d AxisY: %d\n", button ? "YES" : "NO", axisX, axisY);
 }
 
-bool Joystick::GetButtonPressed()
-{
-    return _buttonPressed;
-}
-
-JoystickAxisState Joystick::GetAxisX()
-{
-    return _axisX;
-}
-
-JoystickAxisState Joystick::GetAxisY()
-{
-    return _axisY;
-}
-
-void Joystick::SetButtonPressed(bool pressed)
-{
-    // fprintf(stderr,"%p %s", this, __PRETTY_FUNCTION__);
-    _buttonPressed = pressed;
-}
-
-void Joystick::SetAxisX(JoystickAxisState state)
-{
-    // fprintf(stderr,"%p %s", this, __PRETTY_FUNCTION__);
-    _axisX = state;
-}
-
-void Joystick::SetAxisY(JoystickAxisState state)
-{
-    // fprintf(stderr,"%p %s", this, __PRETTY_FUNCTION__);
-    _axisY = state;
-}

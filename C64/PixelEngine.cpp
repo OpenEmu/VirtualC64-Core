@@ -27,9 +27,9 @@ extern unsigned dirkcnt;
 
 PixelEngine::PixelEngine() // C64 *c64)
 {
-    name = "PixelEngine";
+    setDescription("PixelEngine");
     
-    debug(2, "  Creating PixelEngine at address %p...\n", this);
+    debug(3, "  Creating PixelEngine at address %p...\n", this);
     
     currentScreenBuffer = screenBuffer1[0];
     pixelBuffer = currentScreenBuffer;
@@ -64,7 +64,7 @@ PixelEngine::PixelEngine() // C64 *c64)
 
 PixelEngine::~PixelEngine()
 {
-    debug(2, "  Releasing PixelEngine...\n");
+    debug(3, "  Releasing PixelEngine...\n");
 }
 
 void
@@ -73,7 +73,7 @@ PixelEngine::reset()
     VirtualComponent::reset();
     
     // Establish bindings
-    vic = c64->vic;
+    vic = &c64->vic;
     
     memset(&sr, 0, sizeof(sr));
     memset(&sprite_sr, 0, sizeof(sprite_sr));
