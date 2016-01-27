@@ -1,40 +1,38 @@
-/* Written by Dirk W. Hoffmann, 2006 - 2015
+/*!
+ * @header      C64.h
+ * @author      Dirk W. Hoffmann, www.dirkwhoffmann.de
+ * @copyright   2006 - 2016 Dirk W. Hoffmann
+ */
+/*              This program is free software; you can redistribute it and/or modify
+ *              it under the terms of the GNU General Public License as published by
+ *              the Free Software Foundation; either version 2 of the License, or
+ *              (at your option) any later version.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ *              This program is distributed in the hope that it will be useful,
+ *              but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *              MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *              GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *              You should have received a copy of the GNU General Public License
+ *              along with this program; if not, write to the Free Software
+ *              Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// VERSION 1.4.1:
-// ENHANCEMENTS:
+
+// VERSION 1.4.2:
 //
-// Applied some speed optimizations to the new VIC code. At maximum speed, the
-// emulator is up to 10% faster now.
-// In the debug menu, option "Hide sprites" was broken. This has been fixed. 
+// The ESC key on the Mac keyboard is now mapped to the C64s runstop key and the TAB key to the  restore key.
 //
 // TODO:
-// Add subtext "xx Tracks", "Type 0 tape" to Media Dialog
 // Use better text descriptions in Mount dialog for G64 and NIB files
 // Cartridge dialog
 //
 // CLEANUP:
-// Remove MyOpenGLView class
+// 1. Remove MyOpenGLView class
 // 
 // SPEEDUP:
 //
-// 1. Make CIA1 and CIA2 dynamic objects
-//    Inline execution functions as much as possible
-// 2. Add routine to quickly get the disk name from GCR data
+// 1. Add routine to quickly get the disk name from GCR data
 //    Right now, the hardware dialog takes some time to open
 //
 // ENHANCEMENTS (BRAIN STORMING):
@@ -47,16 +45,11 @@
 #define _C64_INC
 
 #define NDEBUG      // RELEASE
-#define DEBUG_LEVEL 2  // RELEASE
 
-// Snapshot version number of this release
-#define V_MAJOR 1
-#define V_MINOR 4
-#define V_SUBMINOR 1
-
-#include "basic.h"
-#include "VirtualComponent.h"
+// General
 #include "Message.h"
+
+// Loading and saving
 #include "Snapshot.h"
 #include "T64Archive.h"
 #include "D64Archive.h"
@@ -66,6 +59,8 @@
 #include "PRGArchive.h"
 #include "P00Archive.h"
 #include "FileArchive.h"
+
+// Sub components
 #include "IEC.h"
 #include "Keyboard.h"
 #include "Joystick.h"
@@ -78,19 +73,22 @@
 #include "TOD.h"
 #include "CIA.h"
 #include "CPU.h"
+
+// Peripherals
 #include "VC1541.h"
 #include "Datasette.h"
 #include "Cartridge.h"
 #include "ExpansionPort.h"
 
 
-//! A complete virtual C64
-/*! The class puts all components together to a working virtual computer.
+//! @class    A complete virtual C64
+
+/*
 	
 	------------------------    ------------------------
     |                      |    |                      |
  -->|       C64Proxy       |<-->|         C64          |
- |  |  Obj-C / C++ bridge  |    |      (c++ world)     |
+ |  |  Obj-C / C++ bridge  |    |      (C++ world)     |
  |  ------------------------    ------------------------
  |                                         |
  |  ------------------------               |
@@ -176,74 +174,74 @@
 
 class C64 : public VirtualComponent {
 
-public:	
-	
-	//! Message queue. Used to communicate with the graphical user interface.
-	MessageQueue queue;
-	
-	//! Reference to the connected virtual memory. 	
-	C64Memory *mem;
-	
-	//! Reference to the connected virtual CPU. 	
-    CPU *cpu;
-	
-	//! Reference to the connected virtual video controller (VIC). 	
-	VIC *vic;
-	
-	//! Reference to the first connected virtual complex interface adapter (CIA 1). 	
-	CIA1 *cia1;
-	
-	//! Reference to the first connected virtual complex interface adapter (CIA 2). 	
-	CIA2 *cia2;
-	
-	//! Reference to the connected sound interface device (SID).
-	SIDWrapper *sid;
-	
-	//! Reference to the connected virtual keyboard.
-	Keyboard *keyboard;
-	
-	//! Reference to joystick in port 1
-	Joystick *joystick1;
+    // -----------------------------------------------------------------------------------------------
+    //                                          Properties
+    // -----------------------------------------------------------------------------------------------
 
-    //! Reference to joystick in port 2
-    Joystick *joystick2;
+public:
+    
+    //
+    // Sub components
+    //
+    
+	//! @brief    The C64s virtual memory (ROM, RAM, and color RAM)
+	C64Memory mem;
+	
+	//! @brief    The C64s virtual CPU
+    CPU cpu;
+	
+	//! @brief    The C64s video controller chip
+	VIC vic;
+	
+	//! @brief    The C64s first versatile interface adapter
+	CIA1 cia1;
+	
+    //! @brief    The C64s second versatile interface adapter
+	CIA2 cia2;
+	
+    //! @brief    The C64s sound chip
+	SIDWrapper sid;
+	
+    //! @brief    The C64s virtual keyboard
+	Keyboard keyboard;
+	
+    //! @brief    The C64s first virtual joystick (plugged into CONTROL PORT 1)
+	Joystick joystickA;
 
-	//! Reference to the virtual IEC bus
-	IEC *iec;
+    //! @brief    The C64s second virtual joystick (plugged into CONTROL PORT 2)
+    Joystick joystickB;
 
-    //! Reference to the virtual expansion port (cartdrige slot)
-    ExpansionPort *expansionport;
+	//! @brief    The C64s interface bus connecting the VC1541 drive
+	IEC iec;
 
-	//! Reference to the virtual VC1541
-	VC1541 *floppy;
+    //! @brief    The C64s virtual expansion port (cartdrige slot)
+    ExpansionPort expansionport;
 
-    //! Virtual tape drive (Datasette)
+    //! @brief    A virtual VC1541 floppy drive
+	VC1541 floppy;
+
+    //! @brief    A virtual datasette
     Datasette datasette;
 
     
 private:
 
-	//! The execution thread
-	pthread_t p;
+    //
+    // Execution thread
+    //
     
-    //! System timer information (needed for running the execution thread at the desired speed)
+    //! @brief    The emulators execution thread
+    pthread_t p;
+    
+    /*! @brief    System timer information
+     *  @details  Used to put the emulation thread to sleep for the proper amount of time
+     */
     mach_timebase_info_data_t timebase;
     
-    //! Converts kernel time to nanoseconds
-    uint64_t abs_to_nanos(uint64_t abs) { return abs * timebase.numer / timebase.denom; }
-
-    //! Converts nanoseconds to kernel time
-    uint64_t nanos_to_abs(uint64_t nanos) { return nanos * timebase.denom / timebase.numer; }
-   
-	//! Snapshot history ring buffer (for cheatbox)
-	Snapshot *backInTimeHistory[BACK_IN_TIME_BUFFER_SIZE]; 
-    
-	//! ring buffer write pointer
-	unsigned backInTimeWritePtr;
-    
-    // -----------------------------------------------------------------------------------------------
-    //                                          Properties
-    // -----------------------------------------------------------------------------------------------
+    /*! @brief    Wake-up time of the synchronization timer in nanoseconds
+     *  @details  This value is recomputed each time the emulator thread is put to sleep
+     */
+    uint64_t nanoTargetTime;
 
     //! Indicates if c64 is currently running at maximum speed (with timing synchronization disabled)
     bool warp;
@@ -253,29 +251,47 @@ private:
     
     //! Indicates that we should run as fast as possible at least during disk operations
     bool warpLoad;
+    
+    
+    //
+    // Executed cycle, rasterline, and frame
+    //
 
-public:
+	//! @brief    Elapsed C64 clock cycles since power up
+	uint64_t cycle;
     
-	//! Current clock cycle since power up
-	uint64_t cycles;
-	
-    //! Current clock cycle relative to the current rasterline
-    /*! Range: 1 ... 63 on PAL machines
-               1 ... 65 on NTSC machines */
-    int rasterlineCycle;
-    
-	//! Current frame number since power up
+	//! @brief    Total number of frames drawn since power up
 	uint64_t frame;
 	
-	//! Current rasterline number
+	//! @brief    Currently drawn rasterline
 	uint16_t rasterline;
 	
-private:
-    
-	//! Target time in nanoseconds
-	/*! Used to synchronize emulation speed. */
-	uint64_t nanoTargetTime;
+    /*! @brief    Currently executed clock cycle relative to the current rasterline
+     *  @details  Range: 1 ... 63 on PAL machines, 1 ... 65 on NTSC machines
+     */
+    uint8_t rasterlineCycle;
 
+    
+    //
+    // Time travel ring buffer
+    //
+    
+    //! @brief    Ring buffer for storing the time travel snapshot images
+    Snapshot *backInTimeHistory[BACK_IN_TIME_BUFFER_SIZE];
+    
+    //! @brief    Write pointer of the time travel ring buffer
+    unsigned backInTimeWritePtr;
+    
+
+    //
+    // Message queue
+    //
+    
+    /*! @brief    Message queue.
+     *  @details  Used to communicate with the graphical user interface.
+     */
+    MessageQueue queue;
+    
     
 	// -----------------------------------------------------------------------------------------------
 	//                                             Methods
@@ -283,241 +299,260 @@ private:
 	
 public:
 	
-	//! Constructor
+	//! @brief    Constructor
 	C64();
 	
-	//! Destructor
+	//! @brief    Destructor
 	~C64();
 
-	//! Reset the virtual C64 and all of its sub components. 
-	/*! A reset is performed by simulating a hard reset on a real C64. */
+	//! @brief    Resets the virtual C64 and all of its sub components.
     void reset();
     
-    //! Dump current configuration into message queue
+    //! @brief    Dumps current configuration into message queue
     void ping();
 
-	//! Dump current state into logfile
+	//! @brief    Prints debugging information
 	void dumpState();
 	
 			
-	// -----------------------------------------------------------------------------------------------
-	//                                         Configure hardware
-	// -----------------------------------------------------------------------------------------------
+    //
+    //! @functiongroup Configuring the emulator
+    //
 	
-public:
-	
-	//! Returns true for PAL machines
-	inline bool isPAL() { return vic->isPAL(); }
+	//! @brief    Returns true if the emulator is currently running in PAL mode
+	inline bool isPAL() { return vic.isPAL(); }
 
-	//! Set PAL mode
-    //  DEPRECATED. PAL/NTSC IS DETERMINED BY VIC CHIP MODEL
+	/*! @brief    Puts the emulator in PAL mode
+     *  @details  This method plugs in a PAL VIC chip and reconfigures SID with the proper timing information 
+     */
 	void setPAL();
 	
-	//! Returns true for NTSC machines
-    //  DEPRECATED. PAL/NTSC IS DETERMINED BY VIC CHIP MODEL
-	inline bool isNTSC() { return !vic->isPAL(); }
+    //! @brief    Returns true if the emulator is currently running in NTSC mode
+	inline bool isNTSC() { return !vic.isPAL(); }
 
-	//! Set NTSC mode
+    /*! @brief    Puts the emulator in PAL mode
+     *  @details  This method plugs in a PAL VIC chip and reconfigures SID with the proper timing information
+     */
 	void setNTSC();
 
-    //! Returns true iff audio filters are enabled.
-    bool getAudioFilter() { return sid->getAudioFilter(); }
+    //! @brief    Returns true iff audio filters are enabled.
+    bool getAudioFilter() { return sid.getAudioFilter(); }
 
-	//! Enable or disable filters of SID.
-	void setAudioFilter(bool value) { sid->setAudioFilter(value); }
+	//! @brief    Enables or disables SID audio filters.
+	void setAudioFilter(bool value) { sid.setAudioFilter(value); }
       
-    //! Returns true if reSID library is used
-    bool getReSID() { return sid->getReSID(); }
+    //! @brief    Returns true if reSID library is used
+    bool getReSID() { return sid.getReSID(); }
 
-    //! Turn reSID library on or off
-    void setReSID(bool value) { sid->setReSID(value); }
+    //! @brief    Turns reSID library on or off
+    void setReSID(bool value) { sid.setReSID(value); }
 
-    //! Get sampling method
-    inline sampling_method getSamplingMethod() { return sid->getSamplingMethod(); }
+    //! @brief    Gets the sampling method
+    inline sampling_method getSamplingMethod() { return sid.getSamplingMethod(); }
     
-    //! Set sampling method
-    void setSamplingMethod(sampling_method value) { sid->setSamplingMethod(value); }
+    //! @brief    Sets the sampling method
+    void setSamplingMethod(sampling_method value) { sid.setSamplingMethod(value); }
     
-    //! Get chip model 
-    inline chip_model getChipModel() { return sid->getChipModel(); }
+    //! @brief    Gets the SID chip model
+    inline chip_model getChipModel() { return sid.getChipModel(); }
     
-    //! Set chip model 
-    void setChipModel(chip_model value) { sid->setChipModel(value); }
+    //! @brief    Sets the SID chip model
+    void setChipModel(chip_model value) { sid.setChipModel(value); }
 
-	
-	// -----------------------------------------------------------------------------------------------
-	//                                       Loading and saving
-	// -----------------------------------------------------------------------------------------------
-
-public:
-	
-	//! Load state from snapshot container
-	void loadFromSnapshot(Snapshot *snapshot);
-
-    //! Save state to snapshot container
-    void saveToSnapshot(Snapshot *snapshot);
-
-	
-	// -----------------------------------------------------------------------------------------------
-	//                                           Control
-	// -----------------------------------------------------------------------------------------------
-
-public:
-	
-	//! Perform a soft reset
-	/*! On a real C64, a soft reset is triggered by hitting Runstop and Restore */
-	void runstopRestore(); 
-	
-	//! Returns true iff the virtual C64 is able to run (i.e., all ROMs are loaded)
-	bool isRunnable();
-	
-	//! Power on virtual C64
-	/*! The execution thread is launched and the virtual computer enters the "running" state */
+    
+    //
+    //! @functiongroup Running the emulator
+    //
+		
+	//! @brief    Launches the emulator
+	/*! @details  The execution thread is launched and the virtual computer enters the "running" state 
+     */
 	void run();
 	
-	// Returns true iff the virtual C64 is in the "running" state */
+    /*! @brief    The tread exit function.
+     *  @details  This method is invoked automatically when the execution thread terminates.
+     */
+    void threadCleanup();
+
+    //! @brief    Returns true iff the virtual C64 is able to run (i.e., all ROMs are loaded)
+    bool isRunnable();
+    
+	//! @brief    Returns true iff the virtual C64 is in the "running" state
 	bool isRunning();
 	
-	//! Freeze the emulator
-	/*! The execution thread is terminated and the virtual computers enters the "halted" state */
+	/*! @brief    Freezes the emulator
+	 *  @details  The execution thread is terminated and the virtual computers enters the "halted" state 
+     */
 	void halt();
 	
-	//! Returns true iff the virtual C64 is in the "halted" state */
+	//! @brief    Returns true iff the virtual C64 is in the "halted" state
 	bool isHalted();
 	
-	//! Execute one command
+    /*! @brief    Perform a manually triggered NMI interrupt
+     *  @details  On a real C64, an NMI interrupt is triggered by hitting the restore key
+     */
+    // void restore();
+
+    /*! @brief    Perform a soft reset
+     *  @details  On a real C64, a soft reset is triggered by hitting Runstop and Restore
+     */
+    // void runstopRestore();
+
+	/*! @brief    Executes one CPU instruction
+     *  @details  This method implements the "step" action of the debugger
+     */
 	void step(); 
 	
-	//! Execute virtual C64 for one cycle
-	inline bool executeOneCycle();
-	
-	//! Execute until the end of the rasterline
+	//! @brief    Executes until the end of the rasterline
 	bool executeOneLine();
-	
-	//! Get notification message from message queue
-	Message *getMessage();
-	
-	//! Feed notification message into message queue
-	void putMessage(int id, int i = 0, void *p = NULL, const char *c = NULL);
-	
+    //! @brief    Executes virtual C64 for one cycle
+    inline bool executeOneCycle();
+    
 private:
 	
-	//! Actions to be performed at the beginning of each rasterline
+    
+    
+	//! @brief    Invoked before executing the first cycle of rasterline
 	void beginOfRasterline();
 	
-	//! Actions to be performed at the end of each rasterline	
+    //! @brief    Invoked after executing the last cycle of rasterline
 	void endOfRasterline();
-	
-	
-	// -----------------------------------------------------------------------------------------------
-	//                                  ROM and snapshot handling
-	// -----------------------------------------------------------------------------------------------
-
-public:
 		
-	//! Missing ROMs are indicated by a 1 in the returned bitmap */
-	uint8_t getMissingRoms();
-
-	//! Load ROM image into memory
-	bool loadRom(const char *filename);
-
-	//! Take a snapshot and store it in ringbuffer
-	void takeSnapshot();
-	
-	//! Returns the number of previously taken snapshots
-	/*! Returns a number between 0 and BACK_IN_TIME_BUFFER_SIZE */
-	unsigned numHistoricSnapshots();
-	
-	//! Get snapshot from history buffer
-	/*! The latest snapshot has number 0. Return NULL, if requested snapshot does not exist */
-	Snapshot *getHistoricSnapshot(int nr);
-	
-	
-	// -----------------------------------------------------------------------------------------------
-	//                                           Timing
-	// -----------------------------------------------------------------------------------------------
-	
+    
+    //
+    //! @functiongroup Managing the execution thread
+    //
+    
+    //! @brief    Converts kernel time to nanoseconds
+    uint64_t abs_to_nanos(uint64_t abs) { return abs * timebase.numer / timebase.denom; }
+    
+    //! @brief    Converts nanoseconds to kernel time
+    uint64_t nanos_to_abs(uint64_t nanos) { return nanos * timebase.denom / timebase.numer; }
+    
 public:
     
-    //! Returns true iff cpu runs at maximum speed (timing sychronization is disabled)
+    //! @brief    Returns true iff cpu runs at maximum speed (timing sychronization is disabled).
     inline bool getWarp() { return warp; }
     
-    //! Enable or disable timing synchronization
+    //! @brief    Enables or disables timing synchronization.
     void setWarp(bool b);
     
-    //! Returns true iff cpu should always run at maximun speed
+    //! @brief    Returns true iff cpu should always run at maximun speed.
     inline bool getAlwaysWarp() { return alwaysWarp; }
     
-    //! Setter for alwaysWarp
+    //! @brief    Setter for alwaysWarp.
     void setAlwaysWarp(bool b);
     
-    //! Returns true iff warp mode is activated during disk operations
+    //! @brief    Returns true iff warp mode is activated during disk operations.
     inline bool getWarpLoad() { return warpLoad; }
     
-    //! Setter for warpLoad
+    //! @brief    Setter for warpLoad.
     void setWarpLoad(bool b);
     
-	//! Initialize timer (sets variable target_time)
-	void restartTimer();
-	
-	//! Wait until target_time has been reached and then updates target_time.
-	void synchronizeTiming();
-	
+    /*! @brief    Restarts the synchronization timer
+     *  @details  The function is invoked at launch time to initialize the timer and reinvoked
+     *            when the synchronization timer gets out of sync.
+     */
+    void restartTimer();
     
-	// ---------------------------------------------------------------------------------------------
-	//                                 Archives (disks, tapes, etc.)
-	// ---------------------------------------------------------------------------------------------
-	
-public:
+    //! @brief    Waits until target_time has been reached and then updates target_time.
+    void synchronizeTiming();
     
-	//! Flush specified item from archive into memory and delete archive
-	/*! All archive types are flushable */
+    
+    //
+    //! @functiongroup Accessing cycle, rasterline, and frame information
+    //
+    
+    //! @brief    Returns the number of CPU cycles elapsed so far.
+    inline uint64_t getCycles() { return cycle; }
+    
+    //! @brief    Returns the number of the currently drawn frame.
+    inline uint64_t getFrame() { return frame; }
+    
+    //! @brief    Returns the number of the currently drawn rasterline.
+    inline uint16_t getRasterline() { return rasterline; }
+
+    //! @brief    Returns the currently executed rasterline clock cycle
+    inline uint8_t getRasterlineCycle() { return rasterlineCycle; }
+
+    
+    //
+    //! @functiongroup Loading ROM images
+    //
+    
+    /*! @brief    Provides information about missing ROM images.
+     *  @details  Each missing ROM is indicated by a 1 in the returned bitmap.
+     */
+    uint8_t getMissingRoms();
+    
+    //! @brief    Loads ROM image into memory
+    bool loadRom(const char *filename);
+    
+    
+    //
+    //! @functiongroup Loading and saving snapshots
+    //
+    
+    //! @brief    Loads the current state from a snapshot container
+    void loadFromSnapshot(Snapshot *snapshot);
+    
+    //! @brief    Saves the current state to a snapshot container
+    void saveToSnapshot(Snapshot *snapshot);
+    
+    //! @brief    Takes a snapshot and stores it into the time travel ringbuffer
+    void takeSnapshot();
+    
+    /*! @brief    Returns the number of previously taken snapshots
+     *  @result   Value between 0 and BACK_IN_TIME_BUFFER_SIZE
+     */
+    unsigned numHistoricSnapshots();
+    
+    /*! @brief    Reads a snapshopt from the time travel ringbuffer
+     *  @details  The latest snapshot is indexed 0.
+     *  @result   A reference to a snapshot, if present. NULL, otherwise.
+     */
+    Snapshot *getHistoricSnapshot(int nr);
+    
+
+    //
+    //! @functiongroup Handling archives, tapes, and cartridges
+    //
+    
+	/*! @brief    Flush specified item from archive into memory and delete archive.
+	 *  @details  All archive types are flushable.
+     */
 	bool flushArchive(Archive *a, int item);
 	
-	//! @brief      Inserts an archive as a virtual floppy disk
-    /*! @discussion Only D64 and G64 archives are supported */
+	/*! @brief    Inserts an archive as a virtual floppy disk.
+     *  @details  Only D64 and G64 archives are supported.
+     */
 	bool mountArchive(Archive *a);
 
-    //! @brief      Inserts a TAP archive as a virtual datasette tape
-    /*! @discussion Only TAP archives can be used as tape */
+    /*! @brief    Inserts a TAP archive as a virtual datasette tape.
+     *  @details  Only TAP archives can be used as tape.
+     */
     bool insertTape(TAPArchive *a);
 
-	
-	// ---------------------------------------------------------------------------------------------
-	//                                            Cartridges
-	// ---------------------------------------------------------------------------------------------
-
-	//! Attach cartridge
+	//! @brief    Attaches a cartridge to the expansion port.
 	bool attachCartridge(Cartridge *c);
 	
-	// Detach cartridge
+	//! @brief    Detaches a cartridge from the expansion port.
 	void detachCartridge();
 
-	//! Returns true iff a cartridge is attached
+	//! @brief    Returns true iff a cartridge is attached.
 	bool isCartridgeAttached();
 
-	
-	// ---------------------------------------------------------------------------------------------
-	//                                        Getter and setter 
-	// ---------------------------------------------------------------------------------------------
-			
-	//! Returns the number of CPU cycles elapsed so far
-	inline uint64_t getCycles() { return cycles; }
-
-	//! Returns the number of the currently drawn frame
-	inline uint64_t getFrame() { return frame; }
-
-	//! Returns the number of the currently drawn rasterline
-	inline uint16_t getRasterline() { return rasterline; }
     
+    //
+    //! @functiongroup Accessing the message queue
+    //
     
-	// ---------------------------------------------------------------------------------------------
-	//                                             Misc
-	// ---------------------------------------------------------------------------------------------
-	
-	//! The tread exit function.
-	/*! Automatically invoked by the execution thread on termination */
-	void threadCleanup(); 
+    //! @brief    Gets a notification message from message queue
+    Message *getMessage() { return queue.getMessage(); }
+    
+    //! @brief    Feeds a notification message into message queue
+    void putMessage(int id, int i = 0, void *p = NULL, const char *c = NULL) { queue.putMessage(id, i, p, c); }
+
 };
 
 #endif

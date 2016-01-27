@@ -20,17 +20,15 @@
 
 VC1541::VC1541()
 {
-	name = "1541";
-    debug(2, "Creating virtual VC1541 at address %p\n", this);
+	setDescription("1541");
+    debug(3, "Creating virtual VC1541 at address %p\n", this);
 	
-	// Create sub components
-	mem = new VC1541Memory();
-	cpu = new CPU();
-	cpu->setName("1541CPU");
-    cpu->chipModel = CPU::MOS6502;
+	// Configure CPU
+	cpu.setDescription("1541CPU");
+    cpu.chipModel = CPU::MOS6502;
     
     // Register sub components
-    VirtualComponent *subcomponents[] = { mem, cpu, &via1, &via2, &disk, NULL };
+    VirtualComponent *subcomponents[] = { &mem, &cpu, &via1, &via2, &disk, NULL };
     registerSubComponents(subcomponents, sizeof(subcomponents)); 
 
     // Register snapshot items
@@ -65,10 +63,7 @@ VC1541::VC1541()
 
 VC1541::~VC1541()
 {
-	debug(2, "Releasing VC1541...\n");
-	
-	delete cpu;	
-	delete mem;
+	debug(3, "Releasing VC1541...\n");
 }
 
 void
@@ -77,17 +72,17 @@ VC1541::reset()
     VirtualComponent::reset();
     
     // Establish bindings
-    iec = c64->iec;
+    iec = &c64->iec;
     
-    cpu->mem = mem;
-    cpu->setPC(0xEAA0);
+    cpu.mem = &mem;
+    cpu.setPC(0xEAA0);
     halftrack = 41;
 }
 
 void
 VC1541::resetDisk()
 {
-    debug (2, "Resetting disk in VC1541...\n");
+    debug (3, "Resetting disk in VC1541...\n");
     
     // Disk properties
     disk.clearDisk();
@@ -98,63 +93,18 @@ VC1541::resetDisk()
 void
 VC1541::ping()
 {
-    debug(2, "Pinging VC1541...\n");
+    debug(3, "Pinging VC1541...\n");
     c64->putMessage(MSG_VC1541_LED, redLED ? 1 : 0);
     c64->putMessage(MSG_VC1541_MOTOR, rotating ? 1 : 0);
     c64->putMessage(MSG_VC1541_DISK, diskInserted ? 1 : 0);
 
-    cpu->ping();
-    mem->ping();
+    // TODO: Replace manual pinging of sub components by a call to super::ping()
+    cpu.ping();
+    mem.ping();
     via1.ping();
     via2.ping();
 
 }
-
-#if 0
-uint32_t
-VC1541::stateSize()
-{
-    uint32_t result = VirtualComponent::stateSize();
-    
-    result += disk.stateSize();
-    result += cpu->stateSize();
-    result += via1.stateSize();
-    result += via2.stateSize();
-    result += mem->stateSize();
-    
-    return result;
-}
-
-void
-VC1541::loadFromBuffer(uint8_t **buffer)
-{	
-    uint8_t *old = *buffer;
-    
-    VirtualComponent::loadFromBuffer(buffer);
-    disk.loadFromBuffer(buffer);
-	cpu->loadFromBuffer(buffer);
-    via1.loadFromBuffer(buffer);
-    via2.loadFromBuffer(buffer);
-    mem->loadFromBuffer(buffer);
-    
-    assert(*buffer - old == stateSize());
-}
-
-void 
-VC1541::saveToBuffer(uint8_t **buffer)
-{	
-    uint8_t *old = *buffer;
-    
-    VirtualComponent::saveToBuffer(buffer);
-    disk.saveToBuffer(buffer);
-    cpu->saveToBuffer(buffer);
-    via1.saveToBuffer(buffer);
-    via2.saveToBuffer(buffer);
-	mem->saveToBuffer(buffer);
-    
-    assert(*buffer - old == stateSize());
-}
-#endif 
 
 void 
 VC1541::dumpState()
@@ -241,7 +191,7 @@ VC1541::byteReady(uint8_t byte)
 inline void
 VC1541::byteReady()
 {
-    if (via2.overflowEnabled()) cpu->setV(1);
+    if (via2.overflowEnabled()) cpu.setV(1);
 }
 
 
@@ -250,7 +200,7 @@ VC1541::simulateAtnInterrupt()
 {
 	if (via1.atnInterruptsEnabled()) {
 		via1.indicateAtnInterrupt();
-		cpu->setIRQLineATN();
+		cpu.setIRQLineATN();
 		// debug("CPU is interrupted by ATN line.\n");
 	} else {
 		// debug("Sorry, want to interrupt, but CPU does not accept ATN line interrupts\n");
@@ -420,20 +370,41 @@ VC1541::ejectDisk()
         c64->putMessage(MSG_VC1541_DISK_SOUND, 0);
 }
 
+D64Archive *
+VC1541::convertToD64()
+{
+    D64Archive *archive = new D64Archive();
+    debug(1, "Creating D64 archive from currently inserted diskette ...\n");
+    
+    // Perform test run
+    int error;
+    if (disk.decodeDisk(NULL, &error) > D64_802_SECTORS_ECC || error) {
+        archive->warn("Cannot create archive (error code: %d)\n", error);
+        delete archive;
+        return NULL;
+    }
+    
+    // Decode diskette
+    archive->setNumberOfTracks(42);
+    disk.decodeDisk(archive->getData());
+    
+    archive->debug(2, "Archive has %d files\n", archive->getNumberOfItems());
+    archive->debug(2, "Item %d has size: %d\n", 0, archive->getSizeOfItem(0));
+    
+    return archive;
+}
+
 bool
 VC1541::exportToD64(const char *filename)
 {
-    D64Archive *archive;
-    
     assert(filename != NULL);
+
+    D64Archive *archive = convertToD64();
     
-    // Create archive
-    if ((archive = D64Archive::archiveFromDrive(this)) == NULL)
+    if (archive == NULL)
         return false;
     
-    // Write archive to disk
     archive->writeToFile(filename);
-    
     delete archive;
     return true;
 }

@@ -20,8 +20,8 @@
 
 ExpansionPort::ExpansionPort()
 {
-    name = "Expansion port";
-    debug(2, "  Creating expansion port at address %p...\n", this);
+    setDescription("Expansion port");
+    debug(3, "  Creating expansion port at address %p...\n", this);
 
     // We reset the cartridge here, as reset() keeps the cartridge intact.
     resetCartridge();
@@ -29,7 +29,7 @@ ExpansionPort::ExpansionPort()
 
 ExpansionPort::~ExpansionPort()
 {
-    debug(2, "  Releasing expansion port...\n");
+    debug(3, "  Releasing expansion port...\n");
     detachCartridge();
 }
 
@@ -236,14 +236,14 @@ void
 ExpansionPort::setGameLine(bool value)
 {
     gameLine = value;
-    c64->mem->updatePeekPokeLookupTables();
+    c64->mem.updatePeekPokeLookupTables();
 }
 
 void
 ExpansionPort::setExromLine(bool value)
 {
     exromLine = value;
-    c64->mem->updatePeekPokeLookupTables();
+    c64->mem.updatePeekPokeLookupTables();
 }
 
 void
@@ -311,7 +311,7 @@ ExpansionPort::attachCartridge(Cartridge *c)
 
     // Blend in chip 0
     switchBank(0);
-    c64->mem->updatePeekPokeLookupTables();
+    c64->mem.updatePeekPokeLookupTables();
     // dumpState();
 
     c64->putMessage(MSG_CARTRIDGE, 1);

@@ -1,7 +1,10 @@
-/*
- * Written 2015 by Dirk W. Hoffmann
- *
- * This program is free software; you can redistribute it and/or modify
+/*!
+ * @header      Datasette.h
+ * @author      Dirk W. Hoffmann, www.dirkwhoffmann.de
+ * @copyright   2015 - 2016 Dirk W. Hoffmann
+ * @brief       Declares Datasette class
+ */
+/* This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
@@ -20,8 +23,8 @@
 
 Datasette::Datasette()
 {
-    name = "Datasette";
-    debug(2, "Creating virtual datasette at address %p\n", this);
+    setDescription("Datasette");
+    debug(3, "Creating virtual datasette at address %p\n", this);
         
     // Register snapshot items
     SnapshotItem items[] = {
@@ -53,7 +56,7 @@ Datasette::Datasette()
 
 Datasette::~Datasette()
 {
-    debug(2, "Releasing Datasette...\n");
+    debug(3, "Releasing Datasette...\n");
 
     if (data)
         delete data;
@@ -69,7 +72,7 @@ Datasette::reset()
 void
 Datasette::ping()
 {
-    debug(2, "Pinging Datasette...\n");
+    debug(3, "Pinging Datasette...\n");
     c64->putMessage(MSG_VC1530_TAPE, hasTape() ? 1 : 0);
     // c64->putMessage(MSG_VC1530_MOTOR, motor ? 1 : 0);
     // c64->putMessage(MSG_VC1530_PLAY, playKey ? 1 : 0);
@@ -119,11 +122,6 @@ Datasette::dumpState()
 #if 0
     msg("Datasette\n");
     msg("---------\n\n");
-    msg(" Bit ready timer : %d\n", bitReadyTimer);
-    msg("   Head position : Track %d, Bit offset %d\n", halftrack, bitoffset);
-    msg("            SYNC : %d\n", sync);
-    msg("       Read mode : %s\n", readMode() ? "YES" : "NO");
-    msg("\n");
 #endif
 }
 
@@ -232,17 +230,12 @@ Datasette::pressPlay()
         return;
     
     debug("Datasette::pressPlay\n");
+    playKey = true;
 
-    // nextFallingEdge = 0.5 * PAL_CYCLES_PER_SECOND; /* kick off in 0.5 seconds */
-    // nextRisingEdge = -1;
-    
     // Schedule first pulse
     uint64_t length = pulseLength();
     nextRisingEdge = length / 2;
     nextFallingEdge = length;
-    
-    playKey = true;
-    // c64->putMessage(MSG_VC1530_PLAY, true);
 }
 
 void
@@ -251,7 +244,6 @@ Datasette::pressStop()
     debug("Datasette::pressStop\n");
     setMotor(false);
     playKey = false;
-    // c64->putMessage(MSG_VC1530_PLAY, false);
 }
 
 void
@@ -261,7 +253,6 @@ Datasette::setMotor(bool value)
         return;
     
     motor = value;
-    // c64->putMessage(MSG_VC1530_MOTOR, motor);
 }
 
 void
@@ -291,13 +282,13 @@ Datasette::_execute()
 void
 Datasette::_executeRising()
 {
-    c64->cia1->triggerRisingEdgeOnFlagPin();
+    c64->cia1.triggerRisingEdgeOnFlagPin();
 }
 
 void
 Datasette::_executeFalling()
 {
-    c64->cia1->triggerFallingEdgeOnFlagPin();
+    c64->cia1.triggerFallingEdgeOnFlagPin();
     
     // Schedule next pulse
     advanceHead();

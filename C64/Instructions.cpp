@@ -26,8 +26,6 @@ extern unsigned dirkcnt;
 void 
 CPU::fetch() {
     
-    bool doNMI = false, doIRQ = false;
-	
 	PC_at_cycle_0 = PC;
 	
 	// Check interrupt lines
@@ -39,14 +37,12 @@ CPU::fetch() {
                 debug(1, "NMI (source = %02X)\n", nmiLine);
             nmiEdge = false;
             next = &CPU::nmi_2;
-            doNMI = true;
             return;
 
         } else if (irqLine && !IRQsAreBlocked() && IRQLineRaisedLongEnough()) {
             if (tracingEnabled())
                 debug(1, "IRQ (source = %02X)\n", irqLine);
             next = &CPU::irq_2;
-            doIRQ = true;
             return;
         }
     }
@@ -1501,10 +1497,10 @@ void CPU::BVC_relative()
 {	
 	READ_IMMEDIATE;
 
-    if (chipModel == MOS6502 /* Drive CPU */ && !c64->floppy->getBitAccuracy()) {
+    if (chipModel == MOS6502 /* Drive CPU */ && !c64->floppy.getBitAccuracy()) {
         
         // Special handling for the VC1541 CPU. Taken from Frodo
-        if (!((c64->floppy->via2.io[12] & 0x0E) == 0x0E || getV())) {
+        if (!((c64->floppy.via2.io[12] & 0x0E) == 0x0E || getV())) {
             next = &CPU::BVC_relative_2;
         } else {
             DONE;
@@ -1550,10 +1546,10 @@ void CPU::BVS_relative()
 {	
 	READ_IMMEDIATE;
     
-    if (chipModel == MOS6502 /* Drive CPU */ && !c64->floppy->getBitAccuracy()) {
+    if (chipModel == MOS6502 /* Drive CPU */ && !c64->floppy.getBitAccuracy()) {
         
         // Special handling for the VC1541 CPU. Taken from Frodo
-        if ((c64->floppy->via2.io[12] & 0x0E) == 0x0E || getV()) {
+        if ((c64->floppy.via2.io[12] & 0x0E) == 0x0E || getV()) {
             next = &CPU::BVS_relative_2;
         } else {
             DONE;
