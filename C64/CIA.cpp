@@ -20,7 +20,7 @@
 
 CIA::CIA()
 {
-	name = "CIA";
+	setDescription("CIA");
     
     // Register sub components
     VirtualComponent *subcomponents[] = { &tod, NULL };
@@ -65,10 +65,6 @@ CIA::reset()
 {
     VirtualComponent::reset();
     
-    // Establish bindings
-    cpu = c64->cpu;
-    vic = c64->vic;
-    
     clearInterruptLine();
 
 	PA = 0xff; 
@@ -79,17 +75,6 @@ CIA::reset()
 	latchA = 0xFFFF;
 	latchB = 0xFFFF;
 }
-
-#if 0
-void
-CIA::setFlagPin(uint8_t value)
-{
-    if (value) // Note: FLAG pin is inverted
-        ICR &= ~0x10;
-    else
-        ICR |= 0x10;
-}
-#endif
 
 void
 CIA::triggerRisingEdgeOnFlagPin()
@@ -116,63 +101,63 @@ CIA::peek(uint16_t addr)
 	uint8_t result;
 	
 	switch(addr) {		
-		case CIA_DATA_DIRECTION_A:	
+        case 0x02: // CIA_DATA_DIRECTION_A
 
 			result = DDRA;
 			break;
 
-		case CIA_DATA_DIRECTION_B:
+        case 0x03: // CIA_DATA_DIRECTION_B
 
 			result = DDRB;
 			break;
 			
-		case CIA_TIMER_A_LOW:  
+        case 0x04: // CIA_TIMER_A_LOW
 			
 			result = getCounterALo();
 			break;
 			
-		case CIA_TIMER_A_HIGH: 
+        case 0x05: // CIA_TIMER_A_HIGH
 			result = getCounterAHi();
 			break;
 			
-		case CIA_TIMER_B_LOW:  
+        case 0x06: // CIA_TIMER_B_LOW
 
 			result = getCounterBLo();
 			break;
 			
-		case CIA_TIMER_B_HIGH: 
+        case 0x07: // CIA_TIMER_B_HIGH
 			
 			result = getCounterBHi();
 			break;
 			
-		case CIA_TIME_OF_DAY_SEC_FRAC:
+        case 0x08: // CIA_TIME_OF_DAY_SEC_FRAC
 			
 			result = tod.getTodTenth();
 			tod.defreeze();
 			break;
 		
-		case CIA_TIME_OF_DAY_SECONDS:
+        case 0x09: // CIA_TIME_OF_DAY_SECONDS
 			
 			result = tod.getTodSeconds();
 			break;
 			
-		case CIA_TIME_OF_DAY_MINUTES:
+        case 0x0A: // CIA_TIME_OF_DAY_MINUTES
 			
 			result = tod.getTodMinutes();
 			break;
 			
-		case CIA_TIME_OF_DAY_HOURS:
+        case 0x0B: // CIA_TIME_OF_DAY_HOURS
 
 			tod.freeze();
 			result = tod.getTodHours();
 			break;
 			
-		case CIA_SERIAL_IO_BUFFER:
+        case 0x0C: // CIA_SERIAL_IO_BUFFER
 			
 			result = 0x00;
 			break;
 			
-		case CIA_INTERRUPT_CONTROL:
+        case 0x0D: // CIA_INTERRUPT_CONTROL
 		
 			result = ICR;
 
@@ -194,12 +179,12 @@ CIA::peek(uint16_t addr)
 						
 			break;
 
-		case CIA_CONTROL_REG_A:
+        case 0x0E: // CIA_CONTROL_REG_A
 
 			result = (uint8_t)(CRA & ~0x10); // Bit 4 is always 0 when read
 			break;
 			
-		case CIA_CONTROL_REG_B:
+        case 0x0F: // CIA_CONTROL_REG_B
 			
 			result = (uint8_t)(CRB & ~0x10); // Bit 4 is always 0 when read
 			break;
@@ -217,7 +202,7 @@ void CIA::poke(uint16_t addr, uint8_t value)
 {
 	switch(addr) {
 			
-		case CIA_TIMER_A_LOW:
+        case 0x04: // CIA_TIMER_A_LOW
 			
 			setLatchALo(value);
 			
@@ -227,7 +212,7 @@ void CIA::poke(uint16_t addr, uint8_t value)
 			}
 			return;
 			
-		case CIA_TIMER_A_HIGH:
+        case 0x05: // CIA_TIMER_A_HIGH
 						
 			setLatchAHi(value);		
 			
@@ -242,7 +227,7 @@ void CIA::poke(uint16_t addr, uint8_t value)
 			}
 			return;
 			
-		case CIA_TIMER_B_LOW:  
+        case 0x06: // CIA_TIMER_B_LOW
 
 			setLatchBLo(value);
 
@@ -252,7 +237,7 @@ void CIA::poke(uint16_t addr, uint8_t value)
 			}			
 			return;
 			
-		case CIA_TIMER_B_HIGH: 
+        case 0x07: // CIA_TIMER_B_HIGH
 			
 			setLatchBHi(value);
 			// load counter if timer is stopped
@@ -266,7 +251,8 @@ void CIA::poke(uint16_t addr, uint8_t value)
 			}						
 			return;
 			
-		case CIA_TIME_OF_DAY_SEC_FRAC:
+        case 0x08: // CIA_TIME_OF_DAY_SEC_FRAC
+            
 			if (CRB & 0x80) {
 				tod.setAlarmTenth(value);
 			} else { 
@@ -275,21 +261,23 @@ void CIA::poke(uint16_t addr, uint8_t value)
 			}
 			return;
 			
-		case CIA_TIME_OF_DAY_SECONDS:
+        case 0x09: // CIA_TIME_OF_DAY_SECONDS
+            
 			if (CRB & 0x80)
 				tod.setAlarmSeconds(value);
 			else 
 				tod.setTodSeconds(value);
 			return;
 			
-		case CIA_TIME_OF_DAY_MINUTES:
+        case 0x0A: // CIA_TIME_OF_DAY_MINUTES
+            
 			if (CRB & 0x80)
 				tod.setAlarmMinutes(value);
 			else 
 				tod.setTodMinutes(value);
 			return;
 			
-		case CIA_TIME_OF_DAY_HOURS:
+        case 0x0B: // CIA_TIME_OF_DAY_HOURS
 			
 			if (CRB & 0x80) {
 				tod.setAlarmHours(value);
@@ -303,13 +291,14 @@ void CIA::poke(uint16_t addr, uint8_t value)
 			}
 			return;
 			
-		case CIA_SERIAL_IO_BUFFER:
+        case 0x0C: // CIA_SERIAL_IO_BUFFER
+            
 			// Serial I/O communication is not (yet) implemented
 			//triggerInterrupt(0x08);
 			// debug("poke CIA_SERIAL_IO_BUFFER: %0x2X\n", value);
 			return;
 			
-		case CIA_INTERRUPT_CONTROL:
+        case 0x0D: // CIA_INTERRUPT_CONTROL
 			
 			//if ((value & 0x84) == 0x84)
 			//	debug("SETTING TIME OF DAY ALARM (%02X)\n", value);
@@ -329,7 +318,7 @@ void CIA::poke(uint16_t addr, uint8_t value)
 			}
 			return;
 			
-		case CIA_CONTROL_REG_A:
+        case 0x0E: // CIA_CONTROL_REG_A
 		{
 			// 
 			// Adapted from PC64Win by Wolfgang Lorenz
@@ -386,7 +375,7 @@ void CIA::poke(uint16_t addr, uint8_t value)
 			return;
 		}
 			
-		case CIA_CONTROL_REG_B:
+        case 0x0F: // CIA_CONTROL_REG_B
 		{
 			// 
 			// Adapted from PC64Win by Wolfgang Lorenz
@@ -505,8 +494,6 @@ void CIA::dumpTrace()
 
 void CIA::dumpState()
 {
-    // assert(0);
-
 	msg("              Counter A : %02X\n", getCounterA());
 	msg("                Latch A : %02X\n", getLatchA());
 	msg("            Data port A : %02X\n", getDataPortA());
@@ -767,22 +754,18 @@ void CIA::executeOneCycle()
 
 CIA1::CIA1()
 {
-    name = "CIA1";
-	debug(2, "  Creating CIA1 at address %p...\n", this);
+    setDescription("CIA1");
+	debug(3, "  Creating CIA1 at address %p...\n", this);
 }
 
 CIA1::~CIA1()
 {
-    this->c64 = c64;
-	debug(2, "  Releasing CIA1\n");
+	debug(3, "  Releasing CIA1\n");
 }
 
 void 
 CIA1::reset()
 {
-    keyboard = c64->keyboard;
-    joy[0] = c64->joystick1;
-    joy[1] = c64->joystick2;
     joystick[0] = 0xff;
     joystick[1] = 0xff;
 	CIA::reset();
@@ -799,27 +782,21 @@ CIA1::dumpState()
 void 
 CIA1::raiseInterruptLine()
 {
-	cpu->setIRQLineCIA();
+	c64->cpu.setIRQLineCIA();
 }
 
 void 
 CIA1::clearInterruptLine()
 {
-	cpu->clearIRQLineCIA();
-}
-
-uint8_t 
-CIA1::getInterruptLine()
-{
-	return cpu->getIRQLineCIA();
+	c64->cpu.clearIRQLineCIA();
 }
 
 void 
 CIA1::pollJoystick(Joystick *joy, int joyDevNo)
 {
-    JoystickAxisState leftRightState = joy->GetAxisX();
-	JoystickAxisState upDownState = joy->GetAxisY();
-	bool buttonState = joy->GetButtonPressed();
+    JoystickDirection leftRightState = joy->getAxisX();
+	JoystickDirection upDownState = joy->getAxisY();
+	bool buttonState = joy->getButton();
 	
     assert (joy != NULL);
     
@@ -827,10 +804,10 @@ CIA1::pollJoystick(Joystick *joy, int joyDevNo)
 	// set the down bit: 2, 2 and clear up bit: 2, 1		
 	// Remember: clearJoystickBits(x, y) means pressed
     //           setJoystickBits( x, y ) means released
-	if(upDownState == JOYSTICK_AXIS_Y_UP) {
+	if(upDownState == JOYSTICK_UP) {
 		clearJoystickBits(joyDevNo, 1);
 		setJoystickBits(joyDevNo, 2);
-	} else if(upDownState == JOYSTICK_AXIS_Y_DOWN) {
+	} else if(upDownState == JOYSTICK_DOWN) {
 		clearJoystickBits(joyDevNo, 2);
 		setJoystickBits(joyDevNo, 1);
 	} else {
@@ -839,10 +816,10 @@ CIA1::pollJoystick(Joystick *joy, int joyDevNo)
 	}
 	
 	// left/right
-	if(leftRightState == JOYSTICK_AXIS_X_LEFT) {
+	if(leftRightState == JOYSTICK_LEFT) {
 		clearJoystickBits(joyDevNo, 4);
 		setJoystickBits(joyDevNo, 8);
-	} else if(leftRightState == JOYSTICK_AXIS_X_RIGHT) {
+	} else if(leftRightState == JOYSTICK_RIGHT) {
 		clearJoystickBits(joyDevNo, 8);			
 		setJoystickBits(joyDevNo, 4);
 	} else {
@@ -866,9 +843,9 @@ CIA1::peek(uint16_t addr)
 	assert(addr <= CIA1_END_ADDR - CIA1_START_ADDR);
 	
 	switch(addr) {		
-		case CIA_DATA_PORT_A:
+        case 0x00: // CIA_DATA_PORT_A
 				
-			pollJoystick(joy[1], 2);
+			pollJoystick(&c64->joystickB, 2);
 
             // We change only those bits that are configured as outputs, all input bits are 1
 			result = PA; // iomem[addr] | ~iomem[CIA_DATA_DIRECTION_A];
@@ -880,12 +857,12 @@ CIA1::peek(uint16_t addr)
 			result &= joystick[1];
 			break;
 			
-		case CIA_DATA_PORT_B:
+        case 0x01: // CIA_DATA_PORT_B
 		{
-			uint8_t bitmask = CIA1::peek(CIA_DATA_PORT_A);
-			uint8_t keyboardBits = keyboard->getRowValues(bitmask); 
+            uint8_t bitmask = CIA1::peek(0x00 /* CIA_DATA_PORT_A */);
+			uint8_t keyboardBits = c64->keyboard.getRowValues(bitmask);
 			
-            pollJoystick(joy[0], 1);
+            pollJoystick(&c64->joystickA, 1);
 			
 			result = PB;
 			
@@ -902,7 +879,6 @@ CIA1::peek(uint16_t addr)
 			break;
 	}
 	
-	// log("PEEKING %04X: %02X\n", 0xDC00 + addr, result);
 	return result;
 }
 
@@ -913,24 +889,16 @@ CIA1::poke(uint16_t addr, uint8_t value)
     
 	assert(addr <= CIA1_END_ADDR - CIA1_START_ADDR);
 	
-	// log("Poking %02X to %04X\n", value, 0xDC00 + addr);
-	
 	// The following registers need special handling	
 	switch(addr) {
 			
-		case CIA_DATA_PORT_A: 
+        case 0x00: // CIA_DATA_PORT_A
 			
 			PALatch = value;
 			PA = PALatch | ~DDRA;
 			return;
 			
-		case CIA_DATA_DIRECTION_A:
-
-			DDRA = value;
-			PA = PALatch | ~DDRA;
-			return;
-			
-		case CIA_DATA_PORT_B:
+        case 0x01: // CIA_DATA_PORT_B
 			
             PBold = PB;
             
@@ -938,11 +906,17 @@ CIA1::poke(uint16_t addr, uint8_t value)
 			PB = ((PBLatch | ~DDRB) & ~PB67TimerMode) | (PB67TimerOut & PB67TimerMode);
             
             if ((PBold & 0x10) != (PB & 0x10)) { // edge on lightpen bit?
-                vic->triggerLightPenInterrupt();
+                c64->vic.triggerLightPenInterrupt();
             }
 			return;
 			
-		case CIA_DATA_DIRECTION_B:
+        case 0x02: // CIA_DATA_DIRECTION_A
+            
+            DDRA = value;
+            PA = PALatch | ~DDRA;
+            return;
+            
+        case 0x03: // CIA_DATA_DIRECTION_B
 
             PBold = PB;
 
@@ -950,7 +924,7 @@ CIA1::poke(uint16_t addr, uint8_t value)
 			PB = ((PBLatch | ~DDRB) & ~PB67TimerMode) | (PB67TimerOut & PB67TimerMode);
 
             if ((PBold & 0x10) != (PB & 0x10)) { // edge on lightpen bit?
-                vic->triggerLightPenInterrupt();
+                c64->vic.triggerLightPenInterrupt();
             }
             
             return;
@@ -987,19 +961,17 @@ CIA1::clearJoystickBits(int nr, uint8_t mask)
 
 CIA2::CIA2()
 {
-    name = "CIA2";
-	debug(2, "  Creating CIA2 at address %p...\n", this);
+    setDescription("CIA2");
+	debug(3, "  Creating CIA2 at address %p...\n", this);
 }
 
 CIA2::~CIA2()
 {
-	debug(2, "  Releasing CIA2...\n");
+	debug(3, "  Releasing CIA2...\n");
 }
 
 void CIA2::reset()
 {
-    this->c64 = c64;
-    iec = c64->iec;
 	CIA::reset();
 }
 
@@ -1014,19 +986,13 @@ CIA2::dumpState()
 void 
 CIA2::raiseInterruptLine()
 {
-	cpu->setNMILineCIA();
+	c64->cpu.setNMILineCIA();
 }
 
 void 
 CIA2::clearInterruptLine()
 {
-	cpu->clearNMILineCIA();
-}
-
-uint8_t 
-CIA2::getInterruptLine()
-{
-	return cpu->getNMILineCIA();
+	c64->cpu.clearNMILineCIA();
 }
 
 uint8_t 
@@ -1037,14 +1003,14 @@ CIA2::peek(uint16_t addr)
 	assert(addr <= CIA_END_ADDR - CIA_START_ADDR);
 	
 	switch(addr) {
-		case CIA_DATA_PORT_A:
+        case 0x00: // CIA_DATA_PORT_A
 			
 			result = PA;
 			
 			// The two upper bits are connected to the clock line and the data line
 			result &= 0x3F;
-			result |= (iec->getClockLine() ? 0x40 : 0x00);
-			result |= (iec->getDataLine() ? 0x80 : 0x00);
+			result |= (c64->iec.getClockLine() ? 0x40 : 0x00);
+			result |= (c64->iec.getDataLine() ? 0x80 : 0x00);
 
 			// The external port lines can pull down any bit, even if it configured as output.
 			// Note that bits 0 and 1 are not connected to the bus and determine the memory bank seen by the VIC chip
@@ -1052,7 +1018,7 @@ CIA2::peek(uint16_t addr)
 			
 			return result;
 						
-		case CIA_DATA_PORT_B:
+        case 0x01: // CIA_DATA_PORT_B
 			
 			result = PB;		
 			return result;
@@ -1068,38 +1034,38 @@ CIA2::poke(uint16_t addr, uint8_t value)
 	assert(addr <= CIA2_END_ADDR - CIA2_START_ADDR);
 	
 	switch(addr) {
-		case CIA_DATA_PORT_A:
+        case 0x00: // CIA_DATA_PORT_A
 			
 			PALatch = value;
 			PA = PALatch | ~DDRA;
 
 			// Bits 0 and 1 determine the memory bank seen the VIC
-			vic->setMemoryBankAddr((~PA & 0x03) << 14);	
+			c64->vic.setMemoryBankAddr((~PA & 0x03) << 14);
 
 			// Bits 3 to 5 of PA are connected to the IEC bus
-			iec->updateCiaPins(PALatch, DDRA);
+			c64->iec.updateCiaPins(PALatch, DDRA);
 			return;
 			
-		case CIA_DATA_DIRECTION_A:
-			
-			DDRA = value;
-			PA = PALatch | ~DDRA;
-			
-			// Bits 0 and 1 determine the memory bank seen the VIC
-			vic->setMemoryBankAddr((~PA & 0x03) << 14);	
-			
-			// Bits 3 to 5 of PA are connected to the IEC bus
-			iec->updateCiaPins(PALatch, DDRA);
-			return;
-			
-		case CIA_DATA_PORT_B:
+        case 0x01: // CIA_DATA_PORT_B
 			
 			PBLatch = value;
 			PB = ((PBLatch | ~DDRB) & ~PB67TimerMode) | (PB67TimerOut & PB67TimerMode);
 			// oldPB = PB;
 			return;
 
-		case CIA_DATA_DIRECTION_B:
+        case 0x02: // CIA_DATA_DIRECTION_A
+            
+            DDRA = value;
+            PA = PALatch | ~DDRA;
+            
+            // Bits 0 and 1 determine the memory bank seen the VIC
+            c64->vic.setMemoryBankAddr((~PA & 0x03) << 14);
+            
+            // Bits 3 to 5 of PA are connected to the IEC bus
+            c64->iec.updateCiaPins(PALatch, DDRA);
+            return;
+            
+        case 0x03: // CIA_DATA_DIRECTION_B
 			
 			DDRB = value;
 			PB = ((PBLatch | ~DDRB) & ~PB67TimerMode) | (PB67TimerOut & PB67TimerMode);

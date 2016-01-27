@@ -16,12 +16,11 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include "Disk525.h"
 #include "NIBArchive.h"
-#include "stdio.h"
 
 NIBArchive::NIBArchive()
 {
+    setDescription("NIBArchive");
 	data = NULL;
 	dealloc();
 
@@ -62,16 +61,19 @@ NIBArchive::isNIBFile(const char *filename)
 NIBArchive *
 NIBArchive::archiveFromNIBFile(const char *filename)
 {
-	NIBArchive *archive;
-	
-	fprintf(stderr, "Loading NIB archive from NIB file...\n");
-	archive = new NIBArchive();
-	if (!archive->readFromFile(filename) || !archive->scan()) {
-        fprintf(stderr, "Failed to load archive\n");
+	NIBArchive *archive = new NIBArchive();
+    
+	if (!archive->readFromFile(filename)) {
 		delete archive;
-		archive = NULL;
+        return NULL;
 	}
-	
+
+    if (!archive->scan()) {
+        delete archive;
+        return NULL;
+    }
+
+    archive->debug(1, "NIB archive created from file %s.\n", filename);
     return archive;
 }
 
@@ -88,7 +90,7 @@ NIBArchive::scan()
         // Does item no 'item' exist in NIB file? 
         if (data[i] < 2 || data[i] > 83)
             continue;
-        Halftrack ht = data[i] + 1;
+        unsigned ht = data[i] + 1;
         
         // Convert byte stream into a bit stream
         unsigned j, startOfTrack = 0x100 + item * 0x2000;
@@ -120,7 +122,7 @@ NIBArchive::scan()
 }
 
 bool
-NIBArchive::scanTrack(Halftrack ht, uint8_t *bits, int *start, int *end, int *gap)
+NIBArchive::scanTrack(unsigned ht, uint8_t *bits, int *start, int *end, int *gap)
 {
     // Find loop
     if (!scanForLoop(bits, sizeof(bits), start, end)) {

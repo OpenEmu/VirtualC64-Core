@@ -24,8 +24,9 @@
 
 C64Memory::C64Memory()
 {	
-	name ="C64 memory";
-	debug (2, "  Creating main memory at address %p...\n", this);
+	setDescription("C64 memory");
+    
+	debug (3, "  Creating main memory at address %p...\n", this);
 		
 	charRomFile = NULL;
 	kernelRomFile = NULL;
@@ -48,7 +49,7 @@ C64Memory::C64Memory()
 
 C64Memory::~C64Memory()
 {
-	debug(2, "  Releasing main memory at address %p...\n", this);
+	debug(3, "  Releasing main memory at address %p...\n", this);
 }
 
 void C64Memory::reset()
@@ -56,11 +57,8 @@ void C64Memory::reset()
     VirtualComponent::reset();
     
     // Establish bindings
-    vic = c64->vic;
-    sid = c64->sid;
-    cia1 = c64->cia1;
-    cia2 = c64->cia2;
-    cpu = c64->cpu;
+    // sid = &c64->sid;
+    cpu = &c64->cpu;
     
 	// Initialize RAM (powerup pattern similar to Frodo and VICE)
     for (unsigned i = 0; i < sizeof(ram); i++)
@@ -223,23 +221,11 @@ bool C64Memory::isValidAddr(uint16_t addr, MemoryType type)
 	}
 }
 
-uint8_t 
-C64Memory::peekRam(uint16_t addr) 
-{ 
-	return ram[addr];
-} 
-
-uint8_t 
-C64Memory::peekRom(uint16_t addr) 
-{ 
-	return rom[addr];
-} 
-
 void 
 C64Memory::updatePeekPokeLookupTables()
 {
-    uint8_t EXROM = c64->expansionport->getExromLine() ? 0x10 : 0x00;
-    uint8_t GAME = c64->expansionport->getGameLine() ? 0x08 : 0x00;
+    uint8_t EXROM = c64->expansionport.getExromLine() ? 0x10 : 0x00;
+    uint8_t GAME = c64->expansionport.getGameLine() ? 0x08 : 0x00;
     
     uint8_t index = (cpu->getPortLines() & 0x07) | EXROM | GAME;
     
@@ -299,33 +285,33 @@ uint8_t C64Memory::peekIO(uint16_t addr)
 	if (addr <= 0xD3FF) {
 		// Note: Only the lower 6 bits are used for adressing the VIC I/O space
 		// Therefore, the VIC I/O memory repeats every 64 bytes
-		return vic->peek(addr & 0x003F);	
+		return c64->vic.peek(addr & 0x003F);
 	}
 	
 	// 0xD400 - 0xD7FF (SID)
 	if (addr <= 0xD7FF) {
 		// Note: Only the lower 5 bits are used for adressing the SID I/O space
 		// Therefore, the SID I/O memory repeats every 32 bytes
-		return sid->peek(addr & 0x001F);
+		return c64->sid.peek(addr & 0x001F);
 	}
 	
 	// 0xD800 - 0xDBFF (Color RAM)
 	if (addr <= 0xDBFF) {
-        return (colorRam[addr - 0xD800] & 0x0F) | (vic->getDataBus() & 0xF0);
+        return (colorRam[addr - 0xD800] & 0x0F) | (c64->vic.getDataBus() & 0xF0);
 	}
 	
 	// 0xDC00 - 0xDCFF (CIA 1)
 	if (addr <= 0xDCFF) {
 		// Note: Only the lower 4 bits are used for adressing the CIA I/O space
 		// Therefore, the CIA I/O memory repeats every 16 bytes
-		return cia1->peek(addr & 0x000F);
+		return c64->cia1.peek(addr & 0x000F);
 	}
 	
 	// 0xDD00 - 0xDDFF (CIA 2)
 	if (addr <= 0xDDFF) {
 		// Note: Only the lower 4 bits are used for adressing the CIA I/O space
 		// Therefore, the CIA I/O memory repeats every 16 bytes
-		return cia2->peek(addr & 0x000F);
+		return c64->cia2.peek(addr & 0x000F);
 	}
 	
 	// 0xDE00 - 0xDEFF (I/O area 1)
@@ -339,7 +325,7 @@ uint8_t C64Memory::peekIO(uint16_t addr)
             Lesen von offenen Adressen liefert nämlich auf vielen C64 das zuletzt vom
             VIC gelesene Byte zurück!)" [C.B.] */
         
-		return vic->getDataBus();
+		return c64->vic.getDataBus();
 	}
 
 	assert(false);
@@ -364,8 +350,8 @@ uint8_t C64Memory::peek(uint16_t addr)
         case M_CRTLO:
         case M_CRTHI:
 
-            if (c64->expansionport->romIsBlendedIn(addr))
-                return c64->expansionport->peek(addr);
+            if (c64->expansionport.romIsBlendedIn(addr))
+                return c64->expansionport.peek(addr);
             else
                 return ram[addr];
             
@@ -401,31 +387,13 @@ uint8_t C64Memory::peek(uint16_t addr)
 //                                    Poke
 // --------------------------------------------------------------------------------
 
-void C64Memory::pokeRam(uint16_t addr, uint8_t value)             
-{ 
-	ram[addr] = value;
-}
-
-void C64Memory::pokeRom(uint16_t addr, uint8_t value)             
-{ 
-#if 0
-    if (cartridge != NULL && cartridge->isRomAddr(addr)) {
-        cartridge->poke(addr, value);
-    } else {
-        rom[addr] = value;
-    }
-#endif
-    
-    rom[addr] = value;
-}
-
 void C64Memory::pokeIO(uint16_t addr, uint8_t value)
 {
 	// 0xD000 - 0xD3FF (VIC)
 	if (addr < 0xD400) {
 		// Note: Only the lower 6 bits are used for adressing the VIC I/O space
 		// Therefore, the VIC I/O memory repeats every 64 bytes
-		vic->poke(addr & 0x003F, value);
+		c64->vic.poke(addr & 0x003F, value);
 		return;
 	}
 	
@@ -433,7 +401,7 @@ void C64Memory::pokeIO(uint16_t addr, uint8_t value)
 	if (addr < 0xD800) {
 		// Note: Only the lower 5 bits are used for adressing the SID I/O space
 		// Therefore, the SID I/O memory repeats every 32 bytes
-		sid->poke(addr & 0x001F, value);
+		c64->sid.poke(addr & 0x001F, value);
 		return;
 	}
 
@@ -449,7 +417,7 @@ void C64Memory::pokeIO(uint16_t addr, uint8_t value)
 	if (addr < 0xDD00) {
 		// Note: Only the lower 4 bits are used for adressing the CIA I/O space
 		// Therefore, the VIC I/O memory repeats every 16 bytes
-		cia1->poke(addr & 0x000F, value);
+		c64->cia1.poke(addr & 0x000F, value);
 		return;
 	}
 	
@@ -457,7 +425,7 @@ void C64Memory::pokeIO(uint16_t addr, uint8_t value)
 	if (addr < 0xDE00) {
 		// Note: Only the lower 4 bits are used for adressing the CIA I/O space
 		// Therefore, the VIC I/O memory repeats every 16 bytes
-		cia2->poke(addr & 0x000F, value);
+		c64->cia2.poke(addr & 0x000F, value);
 		return;
 	}
 	
@@ -466,7 +434,7 @@ void C64Memory::pokeIO(uint16_t addr, uint8_t value)
 	if (addr < 0xE000) {
         // Some registers in this area trigger a bank switch in the
         // attached cartridge module. So we pass the value there...
-        c64->expansionport->poke(addr, value);
+        c64->expansionport.poke(addr, value);
         return;
 	}
 

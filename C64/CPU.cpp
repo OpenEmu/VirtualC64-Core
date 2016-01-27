@@ -20,8 +20,8 @@
 
 CPU::CPU()
 {	
-	name = "CPU";
-	debug(2, "  Creating CPU at address %p...\n", this);
+	setDescription("CPU");
+	debug(3, "  Creating CPU at address %p...\n", this);
 	
     // Chip model
     chipModel = MOS6510;
@@ -83,7 +83,7 @@ CPU::CPU()
 
 CPU::~CPU()
 {
-	debug(2, "  Releasing CPU...\n");
+	debug(3, "  Releasing CPU...\n");
 }
 
 void
@@ -91,6 +91,7 @@ CPU::reset()
 {
     VirtualComponent::reset();
     
+    B = 1; 
 	external_port_bits = 0x1F;
 	rdyLine = true;
 	next = &CPU::fetch;
