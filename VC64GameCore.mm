@@ -425,20 +425,38 @@
 - (oneway void)didPushC64Button:(OEC64Button)button forPlayer:(NSUInteger)player;
 {
     // Port 2 is used as the default for most programs and games due to technical reasons
-    if(button == OEC64JoystickUp) { c64->joystickA.setAxisY(JOYSTICK_UP); }
-    if(button == OEC64JoystickDown) { c64->joystickA.setAxisY(JOYSTICK_DOWN); }
-    if(button == OEC64JoystickLeft) { c64->joystickA.setAxisX(JOYSTICK_LEFT); }
-    if(button == OEC64JoystickRight) { c64->joystickA.setAxisX(JOYSTICK_RIGHT); }
-    if(button == OEC64ButtonFire) { c64->joystickA.setButtonPressed(true); }
+    if (player == 1){
+        if(button == OEC64JoystickUp) { c64->joystickA.setAxisY(JOYSTICK_UP); }
+        if(button == OEC64JoystickDown) { c64->joystickA.setAxisY(JOYSTICK_DOWN); }
+        if(button == OEC64JoystickLeft) { c64->joystickA.setAxisX(JOYSTICK_LEFT); }
+        if(button == OEC64JoystickRight) { c64->joystickA.setAxisX(JOYSTICK_RIGHT); }
+        if(button == OEC64ButtonFire) { c64->joystickA.setButtonPressed(true); }
+    }else if (player ==2){
+        if(button == OEC64JoystickUp) { c64->joystickB.setAxisY(JOYSTICK_UP); }
+        if(button == OEC64JoystickDown) { c64->joystickB.setAxisY(JOYSTICK_DOWN); }
+        if(button == OEC64JoystickLeft) { c64->joystickB.setAxisX(JOYSTICK_LEFT); }
+        if(button == OEC64JoystickRight) { c64->joystickB.setAxisX(JOYSTICK_RIGHT); }
+        if(button == OEC64ButtonFire) { c64->joystickB.setButtonPressed(true); }
+        
+    }
 }
 
 - (oneway void)didReleaseC64Button:(OEC64Button)button forPlayer:(NSUInteger)player;
 {
-    if(button == OEC64JoystickUp) { c64->joystickB.setAxisY(JOYSTICK_UP); }
-    if(button == OEC64JoystickDown) { c64->joystickB.setAxisY(JOYSTICK_DOWN); }
-    if(button == OEC64JoystickLeft) { c64->joystickB.setAxisX(JOYSTICK_LEFT); }
-    if(button == OEC64JoystickRight) { c64->joystickB.setAxisX(JOYSTICK_RIGHT); }
-    if(button == OEC64ButtonFire) { c64->joystickB.setButtonPressed(false); }
+    if (player == 1){
+        if(button == OEC64JoystickUp) { c64->joystickA.setAxisY(JOYSTICK_RELEASED); }
+        if(button == OEC64JoystickDown) { c64->joystickA.setAxisY(JOYSTICK_RELEASED); }
+        if(button == OEC64JoystickLeft) { c64->joystickA.setAxisX(JOYSTICK_RELEASED); }
+        if(button == OEC64JoystickRight) { c64->joystickA.setAxisX(JOYSTICK_RELEASED); }
+        if(button == OEC64ButtonFire) { c64->joystickA.setButtonPressed(false); }
+    }else if (player == 2){
+        if(button == OEC64JoystickUp) { c64->joystickB.setAxisY(JOYSTICK_RELEASED); }
+        if(button == OEC64JoystickDown) { c64->joystickB.setAxisY(JOYSTICK_RELEASED); }
+        if(button == OEC64JoystickLeft) { c64->joystickB.setAxisX(JOYSTICK_RELEASED); }
+        if(button == OEC64JoystickRight) { c64->joystickB.setAxisX(JOYSTICK_RELEASED); }
+        if(button == OEC64ButtonFire) { c64->joystickB.setButtonPressed(false); }
+        
+    }
 }
 
 #pragma mark - Misc & Helpers
