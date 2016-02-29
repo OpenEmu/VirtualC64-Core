@@ -19,13 +19,9 @@
 #include "C64.h"
 
 VirtualComponent::VirtualComponent()
-{    
-	name = "Unnamed component";
-    debugLevel = DEBUG_LEVEL;
+{
     running = false;
 	suspendCounter = 0;	
-	traceMode = false;
-	logfile = NULL;
     snapshotItems = NULL;
     subComponents = NULL;
     snapshotSize = 0;
@@ -33,16 +29,13 @@ VirtualComponent::VirtualComponent()
 
 VirtualComponent::~VirtualComponent()
 {
-	// debug(2, "Terminated\n");
+	debug(3, "Terminated\n");
     
     if (subComponents)
         delete [] subComponents;
 
     if (snapshotItems)
         delete [] snapshotItems;
-
-    if (logfile)
-		fclose(logfile);
 }
 
 void
@@ -70,7 +63,7 @@ VirtualComponent::reset()
     
     setTraceMode(false); 
     
-    debug(2, "Resetting...\n");
+    debug(3, "Resetting...\n");
     
 }
 
@@ -136,83 +129,6 @@ VirtualComponent::dumpState()
 {
 }
 
-// ---------------------------------------------------------------------------------------------
-//                                      Printing messages
-// ---------------------------------------------------------------------------------------------
-
-void
-VirtualComponent::msg(const char *fmt, ...)
-{
-	char buf[256];
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap); 
-	va_end(ap);
-	fprintf(logfile ? logfile : stderr, "%s", buf);
-}
-
-void
-VirtualComponent::msg(int level, const char *fmt, ...)
-{
-    if (level > debugLevel)
-        return;
-
-    char buf[256];
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-    fprintf(logfile ? logfile : stderr, "%s", buf);
-}
-
-void
-VirtualComponent::debug(const char *fmt, ...)
-{
-	char buf[256];
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap); 
-	va_end(ap);
-	fprintf(logfile ? logfile : stderr, "%s: %s", name, buf);
-}
-
-void
-VirtualComponent::debug(int level, const char *fmt, ...)
-{
-	if (level > debugLevel) 
-		return;
-
-	char buf[256];
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap); 
-	va_end(ap);
-	fprintf(logfile ? logfile : stderr, "%s: %s", name, buf);
-}
-
-void
-VirtualComponent::warn(const char *fmt, ...)
-{
-	char buf[256];
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap); 
-	va_end(ap);
-	fprintf(logfile ? logfile : stderr, "%s: WARNING: %s", name, buf);
-}
-
-void
-VirtualComponent::panic(const char *fmt, ...)
-{
-	char buf[256];
-	va_list ap;
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap); 
-	va_end(ap);
-	fprintf(logfile ? logfile : stderr, "%s: PANIC: %s", name, buf);
-	
-	assert(0);
-}
 
 // ---------------------------------------------------------------------------------------------
 //                                      Snapshots
@@ -243,15 +159,11 @@ VirtualComponent::registerSubComponents(VirtualComponent **components, unsigned 
     
     unsigned numItems = length / sizeof(VirtualComponent *);
     
-    debug(2, "Registering %d components\n", numItems);
+    debug(3, "Registering %d components\n", numItems);
     
     // Allocate new array on heap and copy array data
     subComponents = new VirtualComponent*[numItems];
     std::copy(components, components + numItems, &subComponents[0]);    
-
-    // for (unsigned i = 0; subComponents[i] != NULL; i++)
-    //     printf("%s ", subComponents[i]->name);
-
 }
 
 uint32_t
