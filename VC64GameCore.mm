@@ -25,12 +25,12 @@
 */
 
 #import "VC64GameCore.h"
-#import <OpenEmuBase/OERingBuffer.h>
+#import "C64.h"
 #import "OEC64SystemResponderClient.h"
-#import <OpenGL/gl.h>
-#import <IOKit/hid/IOHIDUsageTables.h>
 
-#include "C64.h"
+#import <OpenGL/gl.h>
+#import <Carbon/Carbon.h>
+#import <OpenEmuBase/OERingBuffer.h>
 
 #define SOUNDBUFFERSIZE 2048
 
@@ -63,7 +63,6 @@
 - (void)typeText:(NSString *)text;
 - (void)typeText:(NSString *)text withDelay:(int)delay;
 - (void)checkForReady;
-
 - (BOOL)loadBIOSRoms;
 @end
 
@@ -340,24 +339,24 @@
 {
     switch (keycode)
     {
-        case MAC_F1: return Keyboard::C64KEY_F1;
-        case MAC_F2: return Keyboard::C64KEY_F2;
-        case MAC_F3: return Keyboard::C64KEY_F3;
-        case MAC_F4: return Keyboard::C64KEY_F4;
-        case MAC_F5: return Keyboard::C64KEY_F5;
-        case MAC_F6: return Keyboard::C64KEY_F6;
-        case MAC_F7: return Keyboard::C64KEY_F7;
-        case MAC_F8: return Keyboard::C64KEY_F8;
-        case MAC_DEL: return (flags & NSShiftKeyMask) ? Keyboard::C64KEY_INS : Keyboard::C64KEY_DEL;
-        case MAC_RET: return Keyboard::C64KEY_RET;
-        case MAC_CL: return Keyboard::C64KEY_CL;
-        case MAC_CR: return Keyboard::C64KEY_CR;
-        case MAC_CU: return Keyboard::C64KEY_CU;
-        case MAC_CD: return Keyboard::C64KEY_CD;
-        case MAC_ESC: return Keyboard::C64KEY_RUNSTOP;
-        case MAC_TAB: return Keyboard::C64KEY_RESTORE;
-        case MAC_HAT: return '^';
-        case MAC_TILDE_US: if (plainkey != '<' && plainkey != '>') return Keyboard::C64KEY_ARROW; else break;
+        case kVK_F1: return Keyboard::C64KEY_F1;
+        case kVK_F2: return Keyboard::C64KEY_F2;
+        case kVK_F3: return Keyboard::C64KEY_F3;
+        case kVK_F4: return Keyboard::C64KEY_F4;
+        case kVK_F5: return Keyboard::C64KEY_F5;
+        case kVK_F6: return Keyboard::C64KEY_F6;
+        case kVK_F7: return Keyboard::C64KEY_F7;
+        case kVK_F8: return Keyboard::C64KEY_F8;
+        case kVK_Delete: return (flags & NSShiftKeyMask) ? Keyboard::C64KEY_INS : Keyboard::C64KEY_DEL;
+        case kVK_Return: return Keyboard::C64KEY_RET;
+        case kVK_LeftArrow: return Keyboard::C64KEY_CL;
+        case kVK_RightArrow: return Keyboard::C64KEY_CR;
+        case kVK_UpArrow: return Keyboard::C64KEY_CU;
+        case kVK_DownArrow: return Keyboard::C64KEY_CD;
+        case kVK_Escape: return Keyboard::C64KEY_RUNSTOP;
+        case kVK_Tab: return Keyboard::C64KEY_RESTORE;
+        case kVK_ISO_Section: return '^';
+        case kVK_ANSI_Grave: if (plainkey != '<' && plainkey != '>') return Keyboard::C64KEY_ARROW; else break;
     }
 
     if (flags & NSAlternateKeyMask)
