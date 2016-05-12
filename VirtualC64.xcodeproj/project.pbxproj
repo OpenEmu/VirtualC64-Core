@@ -38,7 +38,6 @@
 		3E3E75591C57D71600380EEB /* VC64Object.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3E3E75571C57D71600380EEB /* VC64Object.cpp */; };
 		82EC40A30FD9EC5A0017FC19 /* VC64GameCore.mm in Sources */ = {isa = PBXBuildFile; fileRef = B5008DAE0E8BFB3E005AECAF /* VC64GameCore.mm */; };
 		8706C3D81C2FA1AC000C2893 /* NIBArchive.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8706C3D61C2FA1AC000C2893 /* NIBArchive.cpp */; };
-		8745D7621BFBD56C005E8699 /* _version.cc in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7611BFBD56C005E8699 /* _version.cc */; };
 		8745D7691BFBD59E005E8699 /* Datasette.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7631BFBD59E005E8699 /* Datasette.cpp */; };
 		8745D76A1BFBD59E005E8699 /* Disk525.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7651BFBD59E005E8699 /* Disk525.cpp */; };
 		8745D76B1BFBD59E005E8699 /* ExpansionPort.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7671BFBD59E005E8699 /* ExpansionPort.cpp */; };
@@ -136,7 +135,6 @@
 		8706C3D71C2FA1AC000C2893 /* NIBArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NIBArchive.h; sourceTree = "<group>"; };
 		8706C3D91C30C557000C2893 /* VIC_globals.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VIC_globals.h; sourceTree = "<group>"; };
 		8745D7601BFBD56C005E8699 /* _spline.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _spline.h; sourceTree = "<group>"; };
-		8745D7611BFBD56C005E8699 /* _version.cc */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = _version.cc; sourceTree = "<group>"; };
 		8745D7631BFBD59E005E8699 /* Datasette.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Datasette.cpp; sourceTree = "<group>"; };
 		8745D7641BFBD59E005E8699 /* Datasette.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Datasette.h; sourceTree = "<group>"; };
 		8745D7651BFBD59E005E8699 /* Disk525.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Disk525.cpp; sourceTree = "<group>"; };
@@ -329,7 +327,6 @@
 				3E3E75571C57D71600380EEB /* VC64Object.cpp */,
 				3E3E75581C57D71600380EEB /* VC64Object.h */,
 				8745D7601BFBD56C005E8699 /* _spline.h */,
-				8745D7611BFBD56C005E8699 /* _version.cc */,
 				EB03DCB316FE194000CF0752 /* Archive.cpp */,
 				EB03DCB416FE194000CF0752 /* Archive.h */,
 				EB03DCB516FE194000CF0752 /* basic.cpp */,
@@ -407,7 +404,8 @@
 				EB03DD0B16FE194000CF0752 /* VirtualComponent.cpp */,
 				EB03DD0C16FE194000CF0752 /* VirtualComponent.h */,
 			);
-			path = C64;
+			name = C64;
+			path = virtualc64/C64;
 			sourceTree = "<group>";
 		};
 		EB03DCDA16FE194000CF0752 /* resid */ = {
@@ -540,7 +538,6 @@
 				EB03DD0E16FE194000CF0752 /* basic.cpp in Sources */,
 				8745D7711BFBD5FD005E8699 /* PixelEngine.cpp in Sources */,
 				EB03DD0F16FE194000CF0752 /* C64.cpp in Sources */,
-				8745D7621BFBD56C005E8699 /* _version.cc in Sources */,
 				EB03DD1016FE194000CF0752 /* C64Memory.cpp in Sources */,
 				EB03DD1116FE194000CF0752 /* Cartridge.cpp in Sources */,
 				EB03DD1216FE194000CF0752 /* CIA.cpp in Sources */,
@@ -627,20 +624,11 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"\"$(SRCROOT)/../..\"",
-					"\"$(SRCROOT)/../../../Library/Developer/Xcode/DerivedData/OpenEmu-dmnjbgnffwkmncbbxtcmdxgyynaf/Build/Products/Debug\"",
-				);
-				HEADER_SEARCH_PATHS = (
-					"\"$(PROJECT_DIR)/core/src-fceumm\"",
-					"\"$(PROJECT_DIR)/core/utils/zlib\"",
-					"\"$(PROJECT_DIR)/core/utils/unzip\"",
-					core,
-				);
+				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
+				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "\"$(USER_LIBRARY_DIR)/Application Support/OpenEmu/Cores\"";
-				LIBRARY_SEARCH_PATHS = "\"$(SRCROOT)/fceumm\"";
+				LIBRARY_SEARCH_PATHS = "";
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = VirtualC64;
 				SKIP_INSTALL = YES;
@@ -655,20 +643,11 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"\"$(SRCROOT)/../..\"",
-					"\"$(SRCROOT)/../../../Library/Developer/Xcode/DerivedData/OpenEmu-dmnjbgnffwkmncbbxtcmdxgyynaf/Build/Products/Debug\"",
-				);
-				HEADER_SEARCH_PATHS = (
-					"\"$(PROJECT_DIR)/core/src-fceumm\"",
-					"\"$(PROJECT_DIR)/core/utils/zlib\"",
-					"\"$(PROJECT_DIR)/core/utils/unzip\"",
-					core,
-				);
+				FRAMEWORK_SEARCH_PATHS = "$(inherited)";
+				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "\"$(USER_LIBRARY_DIR)/Application Support/OpenEmu/Cores\"";
-				LIBRARY_SEARCH_PATHS = "\"$(SRCROOT)/fceumm\"";
+				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = VirtualC64;
 				SKIP_INSTALL = YES;
 				USER_HEADER_SEARCH_PATHS = "\"$(PROJECT_DIR)/core/\"";

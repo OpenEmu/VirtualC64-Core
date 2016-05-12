@@ -1,0 +1,30 @@
+{
+  "DVTSourceControlWorkspaceBlueprintPrimaryRemoteRepositoryKey" : "FBD5242BBBF22DA80F8952E5222B0A37353B455C",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyRepositoryLocationsKey" : {
+
+  },
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyStatesKey" : {
+    "FBD5242BBBF22DA80F8952E5222B0A37353B455C" : 0,
+    "B3DAFA4E8DC41169A7FC9D30D8420929A5ED0B16" : 0
+  },
+  "DVTSourceControlWorkspaceBlueprintIdentifierKey" : "793E25B1-17FC-4AE6-B888-0132105001AF",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyPathsKey" : {
+    "FBD5242BBBF22DA80F8952E5222B0A37353B455C" : "VirtualC64-Core\/",
+    "B3DAFA4E8DC41169A7FC9D30D8420929A5ED0B16" : ""
+  },
+  "DVTSourceControlWorkspaceBlueprintNameKey" : "VirtualC64",
+  "DVTSourceControlWorkspaceBlueprintVersion" : 204,
+  "DVTSourceControlWorkspaceBlueprintRelativePathToProjectKey" : "VirtualC64.xcodeproj",
+  "DVTSourceControlWorkspaceBlueprintRemoteRepositoriesKey" : [
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "https:\/\/github.com\/duckey77\/OpenEmu.git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "B3DAFA4E8DC41169A7FC9D30D8420929A5ED0B16"
+    },
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "https:\/\/github.com\/duckey77\/VirtualC64-Core.git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "FBD5242BBBF22DA80F8952E5222B0A37353B455C"
+    }
+  ]
+}
