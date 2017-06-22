@@ -35,6 +35,8 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		3E28F1151EF983FD00DA7848 /* TAPContainer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3E28F1121EF983FD00DA7848 /* TAPContainer.cpp */; };
+		3E28F1161EF983FD00DA7848 /* VIC_colors.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3E28F1131EF983FD00DA7848 /* VIC_colors.cpp */; };
 		3E3E75591C57D71600380EEB /* VC64Object.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3E3E75571C57D71600380EEB /* VC64Object.cpp */; };
 		82EC40A30FD9EC5A0017FC19 /* VC64GameCore.mm in Sources */ = {isa = PBXBuildFile; fileRef = B5008DAE0E8BFB3E005AECAF /* VC64GameCore.mm */; };
 		8706C3D81C2FA1AC000C2893 /* NIBArchive.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8706C3D61C2FA1AC000C2893 /* NIBArchive.cpp */; };
@@ -43,7 +45,6 @@
 		8745D76B1BFBD59E005E8699 /* ExpansionPort.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7671BFBD59E005E8699 /* ExpansionPort.cpp */; };
 		8745D76E1BFBD5E8005E8699 /* G64Archive.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D76C1BFBD5E8005E8699 /* G64Archive.cpp */; };
 		8745D7711BFBD5FD005E8699 /* PixelEngine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D76F1BFBD5FD005E8699 /* PixelEngine.cpp */; };
-		8745D7741BFBD666005E8699 /* TAPArchive.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8745D7721BFBD665005E8699 /* TAPArchive.cpp */; };
 		8D5B49B0048680CD000E48DA /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 089C167DFE841241C02AAC07 /* InfoPlist.strings */; };
 		8D5B49B4048680CD000E48DA /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1058C7ADFEA557BF11CA2CBB /* Cocoa.framework */; };
 		EB03DD0D16FE194000CF0752 /* Archive.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EB03DCB316FE194000CF0752 /* Archive.cpp */; };
@@ -129,6 +130,10 @@
 		089C167EFE841241C02AAC07 /* English */ = {isa = PBXFileReference; fileEncoding = 10; lastKnownFileType = text.plist.strings; name = English; path = English.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		089C167FFE841241C02AAC07 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
 		1058C7ADFEA557BF11CA2CBB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
+		3E28F10F1EF983FD00DA7848 /* C64_defs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = C64_defs.h; sourceTree = "<group>"; };
+		3E28F1101EF983FD00DA7848 /* TAPContainer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TAPContainer.h; sourceTree = "<group>"; };
+		3E28F1121EF983FD00DA7848 /* TAPContainer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = TAPContainer.cpp; sourceTree = "<group>"; };
+		3E28F1131EF983FD00DA7848 /* VIC_colors.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = VIC_colors.cpp; sourceTree = "<group>"; };
 		3E3E75571C57D71600380EEB /* VC64Object.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = VC64Object.cpp; sourceTree = "<group>"; };
 		3E3E75581C57D71600380EEB /* VC64Object.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = VC64Object.h; sourceTree = "<group>"; };
 		8706C3D61C2FA1AC000C2893 /* NIBArchive.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = NIBArchive.cpp; sourceTree = "<group>"; };
@@ -145,8 +150,6 @@
 		8745D76D1BFBD5E8005E8699 /* G64Archive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = G64Archive.h; sourceTree = "<group>"; };
 		8745D76F1BFBD5FD005E8699 /* PixelEngine.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = PixelEngine.cpp; sourceTree = "<group>"; };
 		8745D7701BFBD5FD005E8699 /* PixelEngine.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PixelEngine.h; sourceTree = "<group>"; };
-		8745D7721BFBD665005E8699 /* TAPArchive.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = TAPArchive.cpp; sourceTree = "<group>"; };
-		8745D7731BFBD665005E8699 /* TAPArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TAPArchive.h; sourceTree = "<group>"; };
 		87FBC0891BFC780500AECF5A /* OEC64SystemResponderClient.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OEC64SystemResponderClient.h; path = "../OpenEmu/Commodore 64/OEC64SystemResponderClient.h"; sourceTree = "<group>"; };
 		8D5B49B6048680CD000E48DA /* VirtualC64.oecoreplugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VirtualC64.oecoreplugin; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D5B49B7048680CD000E48DA /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -324,6 +327,10 @@
 		EB03DCB216FE194000CF0752 /* C64 */ = {
 			isa = PBXGroup;
 			children = (
+				3E28F10F1EF983FD00DA7848 /* C64_defs.h */,
+				3E28F1101EF983FD00DA7848 /* TAPContainer.h */,
+				3E28F1121EF983FD00DA7848 /* TAPContainer.cpp */,
+				3E28F1131EF983FD00DA7848 /* VIC_colors.cpp */,
 				3E3E75571C57D71600380EEB /* VC64Object.cpp */,
 				3E3E75581C57D71600380EEB /* VC64Object.h */,
 				8745D7601BFBD56C005E8699 /* _spline.h */,
@@ -388,8 +395,6 @@
 				EB03DCFB16FE194000CF0752 /* Snapshot.h */,
 				EB03DCFD16FE194000CF0752 /* T64Archive.cpp */,
 				EB03DCFE16FE194000CF0752 /* T64Archive.h */,
-				8745D7721BFBD665005E8699 /* TAPArchive.cpp */,
-				8745D7731BFBD665005E8699 /* TAPArchive.h */,
 				EB03DCFF16FE194000CF0752 /* TOD.cpp */,
 				EB03DD0016FE194000CF0752 /* TOD.h */,
 				EB03DD0116FE194000CF0752 /* VC1541.cpp */,
@@ -534,6 +539,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				82EC40A30FD9EC5A0017FC19 /* VC64GameCore.mm in Sources */,
+				3E28F1151EF983FD00DA7848 /* TAPContainer.cpp in Sources */,
 				EB03DD0D16FE194000CF0752 /* Archive.cpp in Sources */,
 				EB03DD0E16FE194000CF0752 /* basic.cpp in Sources */,
 				8745D7711BFBD5FD005E8699 /* PixelEngine.cpp in Sources */,
@@ -554,7 +560,6 @@
 				EB03DD1E16FE194000CF0752 /* OldSID.cpp in Sources */,
 				EB03DD1F16FE194000CF0752 /* P00Archive.cpp in Sources */,
 				EB03DD2016FE194000CF0752 /* PRGArchive.cpp in Sources */,
-				8745D7741BFBD666005E8699 /* TAPArchive.cpp in Sources */,
 				EB03DD2116FE194000CF0752 /* envelope.cc in Sources */,
 				8745D76E1BFBD5E8005E8699 /* G64Archive.cpp in Sources */,
 				EB03DD2216FE194000CF0752 /* extfilt.cc in Sources */,
@@ -577,6 +582,7 @@
 				EB03DD2F16FE194000CF0752 /* wave8580_PS_.cc in Sources */,
 				EB03DD3016FE194000CF0752 /* wave8580_PST.cc in Sources */,
 				EB03DD3116FE194000CF0752 /* ReSID.cpp in Sources */,
+				3E28F1161EF983FD00DA7848 /* VIC_colors.cpp in Sources */,
 				EB03DD3216FE194000CF0752 /* SIDVoice.cpp in Sources */,
 				8706C3D81C2FA1AC000C2893 /* NIBArchive.cpp in Sources */,
 				EB03DD3316FE194000CF0752 /* SIDWrapper.cpp in Sources */,
@@ -621,6 +627,7 @@
 		1DEB913B08733D840010E9CD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
@@ -640,6 +647,7 @@
 		1DEB913C08733D840010E9CD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
