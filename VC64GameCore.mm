@@ -116,6 +116,7 @@
         return NO;
 
     // Peripherals
+    c64->setWarp(false);
     c64->setWarpLoad(false); // Leave disabled otherwise audio can get slightly out of sync
     c64->floppy.setSendSoundMessages(false);
     c64->floppy.setBitAccuracy(true); // Disable to put drive in a faster, but less compatible read-only mode
@@ -136,6 +137,7 @@
     c64->cpu.clearErrorState();
     c64->floppy.cpu.clearErrorState();
     c64->restartTimer();
+
 }
 
 - (void)executeFrame
@@ -146,6 +148,7 @@
 
     for(int i=0; i < rasterLinesToRun; ++i)
         c64->executeOneLine();
+
     
     if(_didRUN)
     {
@@ -188,7 +191,7 @@
                     }
                     else
                     {
-                        [self typeText:@"run \n" withDelay:50000];
+                        [self typeText:@"run \n" withDelay:0];
                         _didRUN=true;
                     }
                 }
@@ -291,7 +294,7 @@
     c64->suspend();
 
     Snapshot *saveState = new Snapshot;
-    c64->saveToSnapshot(saveState);
+    c64->saveToSnapshotSafe(saveState);
     block(saveState->writeToFile(fileName.fileSystemRepresentation),nil);
 
     c64->resume();
@@ -303,7 +306,7 @@
 
     Snapshot *saveState = new Snapshot;
     block(saveState->readFromFile(fileName.fileSystemRepresentation),nil);
-    c64->loadFromSnapshot(saveState);
+    c64->loadFromSnapshotSafe(saveState);
 
     c64->resume();
 }
@@ -339,30 +342,30 @@
 {
     switch (keycode)
     {
-        case kVK_F1: return Keyboard::C64KEY_F1;
-        case kVK_F2: return Keyboard::C64KEY_F2;
-        case kVK_F3: return Keyboard::C64KEY_F3;
-        case kVK_F4: return Keyboard::C64KEY_F4;
-        case kVK_F5: return Keyboard::C64KEY_F5;
-        case kVK_F6: return Keyboard::C64KEY_F6;
-        case kVK_F7: return Keyboard::C64KEY_F7;
-        case kVK_F8: return Keyboard::C64KEY_F8;
-        case kVK_Delete: return (flags & NSShiftKeyMask) ? Keyboard::C64KEY_INS : Keyboard::C64KEY_DEL;
-        case kVK_Return: return Keyboard::C64KEY_RET;
-        case kVK_LeftArrow: return Keyboard::C64KEY_CL;
-        case kVK_RightArrow: return Keyboard::C64KEY_CR;
-        case kVK_UpArrow: return Keyboard::C64KEY_CU;
-        case kVK_DownArrow: return Keyboard::C64KEY_CD;
-        case kVK_Escape: return Keyboard::C64KEY_RUNSTOP;
-        case kVK_Tab: return Keyboard::C64KEY_RESTORE;
+        case kVK_F1: return C64KEY_F1;
+        case kVK_F2: return C64KEY_F2;
+        case kVK_F3: return C64KEY_F3;
+        case kVK_F4: return C64KEY_F4;
+        case kVK_F5: return C64KEY_F5;
+        case kVK_F6: return C64KEY_F6;
+        case kVK_F7: return C64KEY_F7;
+        case kVK_F8: return C64KEY_F8;
+        case kVK_Delete: return (flags & NSShiftKeyMask) ? C64KEY_INS : C64KEY_DEL;
+        case kVK_Return: return C64KEY_RET;
+        case kVK_LeftArrow: return C64KEY_CL;
+        case kVK_RightArrow: return C64KEY_CR;
+        case kVK_UpArrow: return C64KEY_CU;
+        case kVK_DownArrow: return C64KEY_CD;
+        case kVK_Escape: return C64KEY_RUNSTOP;
+        case kVK_Tab: return C64KEY_RESTORE;
         case kVK_ISO_Section: return '^';
-        case kVK_ANSI_Grave: if (plainkey != '<' && plainkey != '>') return Keyboard::C64KEY_ARROW; else break;
+        case kVK_ANSI_Grave: if (plainkey != '<' && plainkey != '>') return C64KEY_ARROW; else break;
     }
 
     if (flags & NSAlternateKeyMask)
     {
         // Commodore key (ALT) is pressed
-        return (int)plainkey | Keyboard::C64KEY_COMMODORE;
+        return (int)plainkey | C64KEY_COMMODORE;
     }
     else
     {
@@ -501,6 +504,11 @@
 
     // C1541 aka Floppy ROM
     NSString *C1541ROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"1541-II.355640-01.bin"];
+    if(!c64->floppy.mem.is1541Rom([C1541ROM UTF8String]))
+    {
+        NSLog(@"VirtualC64: %@ is not a valid C1541 ROM!", charROM);
+        return NO;
+    }
 
     // Load Basic, Kernel, Char and C1541 Floppy ROMs
     c64->loadRom([basicROM UTF8String]);
@@ -590,15 +598,15 @@
         if(c64->mountArchive(D64Archive::archiveFromArbitraryFile([_fileToLoad UTF8String])) &&
            c64->flushArchive(D64Archive::archiveFromArbitraryFile([_fileToLoad UTF8String]), 0)){
             
-            [self typeText:@"load \"*\",8,1\n" withDelay:5000 ];
+            [self typeText:@"load \"*\",8,1\n" withDelay:1000 ];
             
         }
         else if([fileExtension isEqualToString:@"tap"])
         {
-            if(c64->insertTape(TAPArchive::archiveFromTAPFile([_fileToLoad UTF8String])))
+            if(c64->insertTape(TAPContainer::containerFromTAPFile([_fileToLoad UTF8String])))
             {
                 
-                [self typeText:@"LOAD\n" withDelay:5000];
+                [self typeText:@"LOAD\n" withDelay:10000];
                 
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{usleep(400000);c64->datasette.pressPlay();});
             }
