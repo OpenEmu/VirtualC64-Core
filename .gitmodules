@@ -1,0 +1,3 @@
+[submodule "virtualc64"]
+	path = virtualc64
+	url = https://github.com/dirkwhoffmann/virtualc64.git
