@@ -25,10 +25,7 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
 #import <OpenEmuBase/OEGameCore.h>
-
-@class OERingBuffer;
 
 OE_EXPORTED_CLASS
 @interface VC64GameCore : OEGameCore

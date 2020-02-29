@@ -26,7 +26,9 @@
 
 #import "VC64GameCore.h"
 #import "C64.h"
+#import "C64Proxy+Private.h"
 #import "OEC64SystemResponderClient.h"
+#import "VirtualC64-Swift.h"
 
 #import <OpenGL/gl.h>
 #import <Carbon/Carbon.h>
@@ -37,9 +39,11 @@
 @interface VC64GameCore () <OEC64SystemResponderClient>
 {
     C64 *c64;
+    C64Proxy *_proxy;
+    KeyboardController *_kbd;
     NSString *_fileToLoad;
-    uint16_t *_soundBuffer;
-    uint32_t  _pressedKeys[256];
+    float    *_soundBuffer;
+    uint32_t *_videoBuffer;
     BOOL      _didRUN;
     
     //  Used to tell the system that the C64 has finished loading and is ready for interaction
@@ -57,9 +61,6 @@
     BOOL      isGameLoaded;
 }
 
-- (int)translateKey:(char)key plainkey:(char)plainkey keycode:(short)keycode flags:(int)flags;
-- (void)pressKey:(char)c;
-- (void)releaseKey:(char)c;
 - (void)typeText:(NSString *)text;
 - (void)typeText:(NSString *)text withDelay:(int)delay;
 - (void)checkForReady;
@@ -72,25 +73,18 @@
 {
     if((self = [super init]))
     {
-        c64 = new C64();
+        c64     = new C64();
+        _proxy  = [[C64Proxy alloc] initWithC64:c64];
+        _kbd    = [[KeyboardController alloc] initWithC64:_proxy];
 
-        _soundBuffer = (uint16_t *)malloc(SOUNDBUFFERSIZE * sizeof(uint16_t));
-        memset(_soundBuffer, 0, SOUNDBUFFERSIZE * sizeof(uint16_t));
-        
-        isC64Ready = false;
-        
-        isAtReadyPrompt=false;
-        waitingForReady=false;
-        
-        isStillTyping = false;
-        
-        isGameLoading=false;
-        isGameLoaded=false;
+        _soundBuffer = (float *)calloc(SOUNDBUFFERSIZE, sizeof(*_soundBuffer));
 
-        // Keyboard initialization
-        for (int i = 0; i < 256; i++) {
-            _pressedKeys[i] = 0;
-        }
+        isC64Ready      = false;
+        isAtReadyPrompt = false;
+        waitingForReady = false;
+        isStillTyping   = false;
+        isGameLoading   = false;
+        isGameLoaded    = false;
     }
 
     return self;
@@ -98,7 +92,6 @@
 
 - (void)dealloc
 {
-    delete c64;
     free(_soundBuffer);
 }
 
@@ -106,26 +99,27 @@
 
 - (BOOL)loadFileAtPath:(NSString *)path
 {
-    _fileToLoad = [[NSString alloc] initWithString:path];
+    _fileToLoad = [path copy];
 
     // System
     // TODO: Determine region
-    c64->setNTSC();
+    c64->vic.setModel(NTSC_6567);
     
     if(![self loadBIOSRoms])
         return NO;
 
     // Peripherals
-    c64->setWarp(false);
+    c64->setAlwaysWarp(false);
+    // c64->setWarp(false);
     c64->setWarpLoad(false); // Leave disabled otherwise audio can get slightly out of sync
-    c64->floppy.setSendSoundMessages(false);
-    c64->floppy.setBitAccuracy(true); // Disable to put drive in a faster, but less compatible read-only mode
+    c64->drive1.setSendSoundMessages(false);
+    // c64->drive1.setBitAccuracy(true); // Disable to put drive in a faster, but less compatible read-only mode
 
     // Audio
-    c64->setReSID(true);
-    c64->setChipModel(MOS6581); // MOS6581 or MOS8580
-    c64->setSamplingMethod(SAMPLE_FAST);
-    c64->setAudioFilter(false);
+    c64->sid.setReSID(true);
+    c64->sid.setModel(MOS_6581); // MOS6581 or MOS8580
+    c64->sid.setSamplingMethod(SID_SAMPLE_FAST);
+    c64->sid.setAudioFilter(false);
 
     return YES;
 }
@@ -135,31 +129,25 @@
     // Power on sub components
     c64->sid.run();
     c64->cpu.clearErrorState();
-    c64->floppy.cpu.clearErrorState();
+    c64->drive1.cpu.clearErrorState();
+    c64->drive2.cpu.clearErrorState();
     c64->restartTimer();
-
 }
 
 - (void)executeFrame
 {
     // Run the game loop ourselves
-    int rasterLinesToRun = c64->vic.getRasterlinesPerFrame();
-    int samples = c64->sid.getSampleRate() / (c64->isPAL() ? PAL_REFRESH_RATE : NTSC_REFRESH_RATE);
+    int samples = c64->sid.getSampleRate() / c64->vic.getFramesPerSecond();
 
-    for(int i=0; i < rasterLinesToRun; ++i)
-        c64->executeOneLine();
-
+    c64->executeOneFrame();
+    
+    // copy video buffer
+    memcpy(_videoBuffer, c64->vic.screenBuffer(), self.bufferSize.width * self.bufferSize.height * sizeof(uint32_t));
     
     if(_didRUN)
     {
-        for(unsigned i = 0; i < samples; i++)
-        {
-            float bytes = c64->sid.readData();
-            bytes = bytes * 32767.0;
-            _soundBuffer[i] = (uint16_t)bytes;
-        }
-
-        [[self ringBufferAtIndex:0] write:_soundBuffer maxLength:samples * sizeof(uint16_t)];
+        c64->sid.readMonoSamples(_soundBuffer, samples);
+        [[self audioBufferAtIndex:0] write:_soundBuffer maxLength:samples * sizeof(*_soundBuffer)];
     }
     else
     {
@@ -191,7 +179,7 @@
                     }
                     else
                     {
-                        [self typeText:@"run \n" withDelay:0];
+                        [self typeText:@"run\n" withDelay:0];
                         _didRUN=true;
                     }
                 }
@@ -202,7 +190,7 @@
 
 - (void)resetEmulation
 {
-    c64->reset();
+    c64->cpu.reset();
     isC64Ready=false;
     isAtReadyPrompt=false;
     isGameLoaded=false;
@@ -226,23 +214,24 @@
 
 - (NSTimeInterval)frameInterval
 {
-    return c64->isPAL() ? PAL_REFRESH_RATE : NTSC_REFRESH_RATE;
+    return c64->vic.getFramesPerSecond();
 }
 
 // Doesn't seem to work correctly, audio still goes out of sync
 // Use setWarp instead of Always warp
 -(void)fastForward:(BOOL)flag
 {
-   flag ? c64->setWarp(true) : c64->setWarp(false);
+   // flag ? c64->setWarp(true) : c64->setWarp(false);
     
     [super fastForward:flag];
 }
 
+
 #pragma mark - Video
 
-- (const void *)videoBuffer
-{
-    return c64->vic.screenBuffer();
+- (const void*)getVideoBufferWithHint:(void *)hint {
+    _videoBuffer = static_cast<uint32_t *>(hint);
+    return hint;
 }
 
 - (OEIntSize)bufferSize
@@ -267,7 +256,7 @@
 
 - (GLenum)pixelType
 {
-    return GL_UNSIGNED_BYTE;
+    return GL_UNSIGNED_INT_8_8_8_8_REV;
 }
 
 - (GLenum)internalPixelFormat
@@ -282,6 +271,11 @@
     return c64->sid.getSampleRate();
 }
 
+- (NSUInteger)audioBitDepth
+{
+    return 32;
+}
+
 - (NSUInteger)channelCount
 {
     return 1;
@@ -291,87 +285,45 @@
 
 - (void)saveStateToFileAtPath:(NSString *)fileName completionHandler:(void (^)(BOOL, NSError *))block
 {
-    c64->suspend();
-
-    Snapshot *saveState = new Snapshot;
-    c64->saveToSnapshotSafe(saveState);
+    c64->takeUserSnapshotSafe();
+    auto nr = c64->numUserSnapshots() - 1;
+    auto saveState = c64->userSnapshot(nr);
     block(saveState->writeToFile(fileName.fileSystemRepresentation),nil);
-
-    c64->resume();
+    c64->deleteUserSnapshot(nr);
 }
 
 - (void)loadStateFromFileAtPath:(NSString *)fileName completionHandler:(void (^)(BOOL, NSError *))block
 {
-    c64->suspend();
-
     Snapshot *saveState = new Snapshot;
     block(saveState->readFromFile(fileName.fileSystemRepresentation),nil);
     c64->loadFromSnapshotSafe(saveState);
-
-    c64->resume();
 }
 
 #pragma mark - Input
 
 - (oneway void)mouseMovedAtPoint:(OEIntPoint)point
 {
-
+    
 }
 
 - (oneway void)leftMouseDownAtPoint:(OEIntPoint)point
 {
-
+    
 }
 
 - (oneway void)leftMouseUp
 {
-
+    
 }
 
 - (oneway void)rightMouseDownAtPoint:(OEIntPoint)point
 {
-
+    
 }
 
 - (oneway void)rightMouseUp
 {
-
-}
-
-- (int)translateKey:(char)key plainkey:(char)plainkey keycode:(short)keycode flags:(int)flags
-{
-    switch (keycode)
-    {
-        case kVK_F1: return C64KEY_F1;
-        case kVK_F2: return C64KEY_F2;
-        case kVK_F3: return C64KEY_F3;
-        case kVK_F4: return C64KEY_F4;
-        case kVK_F5: return C64KEY_F5;
-        case kVK_F6: return C64KEY_F6;
-        case kVK_F7: return C64KEY_F7;
-        case kVK_F8: return C64KEY_F8;
-        case kVK_Delete: return (flags & NSShiftKeyMask) ? C64KEY_INS : C64KEY_DEL;
-        case kVK_Return: return C64KEY_RET;
-        case kVK_LeftArrow: return C64KEY_CL;
-        case kVK_RightArrow: return C64KEY_CR;
-        case kVK_UpArrow: return C64KEY_CU;
-        case kVK_DownArrow: return C64KEY_CD;
-        case kVK_Escape: return C64KEY_RUNSTOP;
-        case kVK_Tab: return C64KEY_RESTORE;
-        case kVK_ISO_Section: return '^';
-        case kVK_ANSI_Grave: if (plainkey != '<' && plainkey != '>') return C64KEY_ARROW; else break;
-    }
-
-    if (flags & NSAlternateKeyMask)
-    {
-        // Commodore key (ALT) is pressed
-        return (int)plainkey | C64KEY_COMMODORE;
-    }
-    else
-    {
-        // No special translation needed here
-        return (int)key;
-    }
+    
 }
 
 - (oneway void)keyDown:(unsigned short)keyHIDCode characters:(NSString *)characters charactersIgnoringModifiers:(NSString *)charactersIgnoringModifiers flags:(NSEventModifierFlags)modifierFlags
@@ -379,35 +331,8 @@
     // Do not accept input before RUN
     if(!isC64Ready)
         return;
-
-    unsigned char  c       = [characters UTF8String][0];
-    unsigned char  c_unmod = [charactersIgnoringModifiers UTF8String][0];
-    unsigned short keycode = keyHIDCode;
-    unsigned int   flags   = modifierFlags;
-    int c64key;
-
-    // NSLog(@"keyDown: '%c' keycode: %02X flags: %08X", (char)c, keycode, flags);
-
-    // Ignore keys that are already pressed
-    if (_pressedKeys[(unsigned char)keycode])
-        return;
-
-    // Ignore command key
-    if (flags & NSCommandKeyMask)
-        return;
-
-    // Remove alternate key modifier if present
-    if (flags & NSAlternateKeyMask)
-        c = [charactersIgnoringModifiers UTF8String][0];
-
-    // Translate key
-    if (!(c64key = [self translateKey:c plainkey:c_unmod keycode:keycode flags:flags]))
-        return;
-
-    // Press key
-    // NSLog(@"Storing key %c for keycode %ld",c64key, (long)keycode);
-    _pressedKeys[(unsigned char)keycode] = c64key;
-    c64->keyboard.pressKey(c64key);
+    
+    [_kbd keyDownWithKeyCode:keyHIDCode characters:charactersIgnoringModifiers flags:modifierFlags];
 }
 
 - (oneway void)keyUp:(unsigned short)keyHIDCode characters:(NSString *)characters charactersIgnoringModifiers:(NSString *)charactersIgnoringModifiers flags:(NSEventModifierFlags)modifierFlags
@@ -415,123 +340,111 @@
     // Do not accept input before RUN
     if(!isC64Ready)
         return;
-
-    unsigned short keycode = keyHIDCode;
-    //unsigned int   flags   = modifierFlags;
-
-    // NSLog(@"keyUp: keycode: %02X flags: %08X", keycode, flags);
-
-    // Only proceed if the released key is on the records
-    if (!_pressedKeys[(unsigned char)keycode])
-        return;
-
-    // Release key
-    // NSLog(@"Releasing stored key %c for keycode %ld",pressedKeys[keycode], (long)keycode);
-    c64->keyboard.releaseKey(_pressedKeys[keycode]);
-    _pressedKeys[(unsigned char)keycode] = 0;
+    
+    [_kbd keyUpWithKeyCode:keyHIDCode characters:charactersIgnoringModifiers flags:modifierFlags];
 }
 
 - (oneway void)didPushC64Button:(OEC64Button)button forPlayer:(NSUInteger)player;
 {
-    // Port 2 is used as the default for most programs and games due to technical reasons
-    if (player == 1)
-    {
-        if(button == OEC64JoystickUp) { c64->joystickA.setAxisY(JOYSTICK_UP); }
-        if(button == OEC64JoystickDown) { c64->joystickA.setAxisY(JOYSTICK_DOWN); }
-        if(button == OEC64JoystickLeft) { c64->joystickA.setAxisX(JOYSTICK_LEFT); }
-        if(button == OEC64JoystickRight) { c64->joystickA.setAxisX(JOYSTICK_RIGHT); }
-        if(button == OEC64ButtonFire) { c64->joystickA.setButtonPressed(true); }
+    ControlPort *port;
+    switch (player) {
+        case 1: port = &c64->port1; break;
+        case 2: port = &c64->port2; break;
+        default: return;
     }
-    else if (player ==2)
-    {
-        if(button == OEC64JoystickUp) { c64->joystickB.setAxisY(JOYSTICK_UP); }
-        if(button == OEC64JoystickDown) { c64->joystickB.setAxisY(JOYSTICK_DOWN); }
-        if(button == OEC64JoystickLeft) { c64->joystickB.setAxisX(JOYSTICK_LEFT); }
-        if(button == OEC64JoystickRight) { c64->joystickB.setAxisX(JOYSTICK_RIGHT); }
-        if(button == OEC64ButtonFire) { c64->joystickB.setButtonPressed(true); }
-    }
+    
+    if(button == OEC64JoystickUp)    { port->trigger(PULL_UP); }
+    if(button == OEC64JoystickDown)  { port->trigger(PULL_DOWN); }
+    if(button == OEC64JoystickLeft)  { port->trigger(PULL_LEFT); }
+    if(button == OEC64JoystickRight) { port->trigger(PULL_RIGHT); }
+    if(button == OEC64ButtonFire)    { port->trigger(PRESS_FIRE); }
+    
 }
 
 - (oneway void)didReleaseC64Button:(OEC64Button)button forPlayer:(NSUInteger)player;
 {
-    if (player == 1)
-    {
-        if(button == OEC64JoystickUp) { c64->joystickA.setAxisY(JOYSTICK_RELEASED); }
-        if(button == OEC64JoystickDown) { c64->joystickA.setAxisY(JOYSTICK_RELEASED); }
-        if(button == OEC64JoystickLeft) { c64->joystickA.setAxisX(JOYSTICK_RELEASED); }
-        if(button == OEC64JoystickRight) { c64->joystickA.setAxisX(JOYSTICK_RELEASED); }
-        if(button == OEC64ButtonFire) { c64->joystickA.setButtonPressed(false); }
+    ControlPort *port;
+    switch (player) {
+        case 1: port = &c64->port1; break;
+        case 2: port = &c64->port2; break;
+        default: return;
     }
-    else if (player == 2)
-    {
-        if(button == OEC64JoystickUp) { c64->joystickB.setAxisY(JOYSTICK_RELEASED); }
-        if(button == OEC64JoystickDown) { c64->joystickB.setAxisY(JOYSTICK_RELEASED); }
-        if(button == OEC64JoystickLeft) { c64->joystickB.setAxisX(JOYSTICK_RELEASED); }
-        if(button == OEC64JoystickRight) { c64->joystickB.setAxisX(JOYSTICK_RELEASED); }
-        if(button == OEC64ButtonFire) { c64->joystickB.setButtonPressed(false); }
+
+    switch (button) {
+        case OEC64JoystickUp:
+        case OEC64JoystickDown:
+            port->trigger(RELEASE_Y);
+            break;
+            
+        case OEC64JoystickLeft:
+        case OEC64JoystickRight:
+            port->trigger(RELEASE_X);
+            break;
+            
+        case OEC64ButtonFire:
+            port->trigger(RELEASE_FIRE);
+            break;
+            
+        default:
+            break;
     }
 }
+
+- (oneway void)swapJoysticks {
+    
+}
+
 
 #pragma mark - Misc & Helpers
 
 - (BOOL)loadBIOSRoms
 {
     // Get The 4 BIOS ROMs
-
+    
     // BASIC ROM
     NSString *basicROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"basic.901226-01.bin"];
-    if(!c64->mem.isBasicRom([basicROM UTF8String]))
+    if (!ROMFile::isBasicRomFile(basicROM.UTF8String))
     {
         NSLog(@"VirtualC64: %@ is not a valid Basic ROM!", basicROM);
         return NO;
     }
-
+    
     // "Kernal" ROM
     NSString *kernelROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"kernal.901227-03.bin"];
-    if(!c64->mem.isKernelRom([kernelROM UTF8String]))
+    if (!ROMFile::isKernalRomFile(kernelROM.UTF8String))
     {
         NSLog(@"VirtualC64: %@ is not a valid Kernal ROM!", kernelROM);
         return NO;
     }
-
+    
     // Char ROM
     NSString *charROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"characters.901225-01.bin"];
-    if(!c64->mem.isCharRom([charROM UTF8String]))
+    if (!ROMFile::isCharRomFile(charROM.UTF8String))
     {
         NSLog(@"VirtualC64: %@ is not a valid Char ROM!", charROM);
         return NO;
     }
-
+    
     // C1541 aka Floppy ROM
     NSString *C1541ROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"1541-II.355640-01.bin"];
-    if(!c64->floppy.mem.is1541Rom([C1541ROM UTF8String]))
+    if (!ROMFile::isVC1541RomFile(C1541ROM.UTF8String))
     {
         NSLog(@"VirtualC64: %@ is not a valid C1541 ROM!", charROM);
         return NO;
     }
-
+    
     // Load Basic, Kernel, Char and C1541 Floppy ROMs
     c64->loadRom([basicROM UTF8String]);
     c64->loadRom([kernelROM UTF8String]);
     c64->loadRom([charROM UTF8String]);
     c64->loadRom([C1541ROM UTF8String]);
-
+    
     return YES;
-}
-
-- (void)pressKey:(char)c
-{
-    c64->keyboard.pressKey(c);
-}
-
-- (void)releaseKey:(char)c
-{
-    c64->keyboard.releaseKey(c);
 }
 
 - (void)typeText:(NSString *)text
 {
-    [self _typeText:text withDelay:0];
+    [self typeText:text withDelay:0];
 }
 
 - (void)typeText:(NSString *)text withDelay:(int)delay
@@ -539,103 +452,57 @@
     while (isStillTyping)
         usleep(50);
     
-    dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{ [self _typeText:text withDelay:delay]; });
-}
-
-- (void)_typeText:(NSString *)text withDelay:(int)delay
-{
-    const unsigned MAXCHARS = 256;
-    const unsigned KEYDELAY = 27500;
-    unsigned i;
-    
-    isStillTyping= true;
-    
-    fprintf(stderr, "Typing: ");
-    
-    usleep(delay);
-    for (i = 0; i < [text length] && i < MAXCHARS; i++)
-    {
-        unichar uc = [text characterAtIndex:i];
-        char c = (char)uc;
-        
-        if (isupper(c))
-            c = tolower(c);
-        
-        fprintf(stderr, "%c",c);
-        
-        usleep(KEYDELAY);
-        [self pressKey:c];
-        usleep(KEYDELAY);
-        [self releaseKey:c];
-    }
-    
-    if (i != [text length])
-    {
-        // Abbreviate text by three dots
-        for (i = 0; i < 3; i++)
-        {
-            [self pressKey:'.'];
-            usleep(KEYDELAY);
-            [self releaseKey:'.'];
-            usleep(KEYDELAY);
-        }
-    }
-    
-    isStillTyping=false;
-    
-    fprintf(stderr,"\n");
+    isStillTyping = YES;
+    [_kbd typeWithString:text initialDelay:delay completion:^{
+        self->isStillTyping = NO;
+    }];
 }
 
 - (void) _loadGame:(NSString *)fileExtension
 {
-    isGameLoading=true;
+    isGameLoading = true;
     
-    if([fileExtension isEqualToString:@"d64"] ||
-       [fileExtension isEqualToString:@"p00"] ||
-       [fileExtension isEqualToString:@"prg"] ||
-       [fileExtension isEqualToString:@"t64"])
-    {
-        if(c64->mountArchive(D64Archive::archiveFromArbitraryFile([_fileToLoad UTF8String])) &&
-           c64->flushArchive(D64Archive::archiveFromArbitraryFile([_fileToLoad UTF8String]), 0)){
-            
-            [self typeText:@"load \"*\",8,1\n" withDelay:1000 ];
-            
-        }
-        else if([fileExtension isEqualToString:@"tap"])
-        {
-            if(c64->insertTape(TAPContainer::containerFromTAPFile([_fileToLoad UTF8String])))
-            {
-                
-                [self typeText:@"LOAD\n" withDelay:10000];
-                
-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{usleep(400000);c64->datasette.pressPlay();});
+    auto archive = AnyArchive::makeWithFile(_fileToLoad.UTF8String);
+    if (archive != nullptr) {
+        if (archive->numberOfItems() == 1) {
+            // flashing directly to memory is likely to work
+            c64->flash(archive, 0);
+        } else {
+            switch (archive->type()) {
+                case D64_FILE:
+                    [self typeText:@"load \"*\",8,1\n" withDelay:1000];
+                    break;
+                case TAP_FILE: {
+                    c64->datasette.insertTape(dynamic_cast<TAPFile *>(archive));
+                    [self typeText:@"load\n" withDelay:10000];
+                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{usleep(400000);c64->datasette.pressPlay();});
+                    break;
+                }
+                case CRT_FILE:
+                    _didRUN = true;
+                    c64->expansionport.attachCartridgeAndReset(dynamic_cast<CRTFile *>(archive));
+                    break;
+                    
+                default:
+                    break;
             }
         }
-        
     }
-    else if([fileExtension isEqualToString:@"crt"])
-    {
-        if(c64->attachCartridge(Cartridge::cartridgeFromFile([_fileToLoad UTF8String])))
-        {
-            isGameLoaded=true;
-            _didRUN=true;
-            c64->reset();
-        }
-    }
-    isGameLoading=false;
-    isGameLoaded=true;
+
+    isGameLoading   = false;
+    isGameLoaded    = true;
 }
 
 - (void) checkForReady
 {
     int pnt = (c64->mem.peek(0x00d1) | (c64->mem.peek(0x00d2) << 8));  //Get Current Cursor position
     int pntr = c64->mem.peek(0x00d3);     // Current column on the line
-    int lnmx = c64->mem.peek(0x00d5) + 1;   // Get the line lenght
+    int lnmx = c64->mem.peek(0x00d5) + 1; // Get the line lenght
     int blnsw = c64->mem.peek(0x00cc);    // is the curson blinking?  0 is yes, 1 in no
     int addrStrt = pnt - lnmx;            //  set the start position in Ram to start looking at the previous line
-    char *s = "READY.";                   //  We are looking for READY.
+    char const *s = "READY.";             //  We are looking for READY.
     bool charsFound = false;
-
+    
     for (int i = 0; s[i] != '\0'; i++)
     {
         if (c64->mem.peek(addrStrt + i) == (s[i] % 64))
@@ -650,8 +517,8 @@
     
     if (charsFound)
     {
-        isAtReadyPrompt=true;
-        isC64Ready = true;
+        isAtReadyPrompt = true;
+        isC64Ready      = true;
         NSLog(@"Screen address: %d,%d, %d, %d", pnt,pntr, blnsw, lnmx);
     }
 }
