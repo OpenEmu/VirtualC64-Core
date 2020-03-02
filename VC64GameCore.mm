@@ -473,12 +473,13 @@
     isGameLoading = true;
    
     if (CRTFile::isCRTFile(_fileToLoad.UTF8String)) {
+        //Cartridge Loading
            _didRUN = true;
           c64->expansionport.attachCartridgeAndReset( CRTFile::makeWithFile(_fileToLoad.UTF8String));
 
     }else if (TAPFile::isTAPFile(_fileToLoad.UTF8String)) {
+        // Tape Loading
         c64->datasette.insertTape(TAPFile::makeWithFile(_fileToLoad.UTF8String));
-        usleep(300000);
        
         isStillTyping = YES;
          [_kbd typeWithString:@"LOAD\n" initialDelay:0 completion:^{
@@ -486,25 +487,14 @@
              c64->datasette.pressPlay();
          }];
     } else {
+        //Disk Image/Archive Loading
         auto archive = AnyArchive::makeWithFile(_fileToLoad.UTF8String);
         if (archive != nullptr) {
-            switch (archive->type()) {
-                case G64_FILE:
-                case D64_FILE: {
-                    c64->drive1.prepareToInsert();
-                    usleep(300000);
-                    c64->drive1.insertDisk(archive);
-                    [self typeText:@"load \"*\",8,1\n" withDelay:500];
-
-                    break;
-                }
-                case T64_FILE:
-                case P00_FILE:
-                default:
-                    c64->flash(archive, 0);
-                    
-                    break;
-            }
+            c64->drive1.prepareToInsert();
+            c64->drive1.insertDisk(archive);
+            [self typeText:@"load \"*\",8,1\n" withDelay:500];
+        } else {
+            [self typeText:@"This is an unknow image file.  C64 cannot load it." withDelay:500];
         }
     }
     
