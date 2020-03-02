@@ -412,11 +412,15 @@
     }
     
     // "Kernal" ROM
-    NSString *kernelROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"kernal.901227-03.bin"];
-    if (!ROMFile::isKernalRomFile(kernelROM.UTF8String))
+    NSString *kernelROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"JiffyDOS_C64.bin"];
+    if (!ROMFile::isKernalRomFile(kernelROM.UTF8String) || TAPFile::isTAPFile(_fileToLoad.UTF8String))
     {
-        NSLog(@"VirtualC64: %@ is not a valid Kernal ROM!", kernelROM);
-        return NO;
+       kernelROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"kernal.901227-03.bin"];
+        if (!ROMFile::isKernalRomFile(kernelROM.UTF8String))
+        {
+            NSLog(@"VirtualC64: %@ is not a valid Kernal ROM!", kernelROM);
+            return NO;
+        }
     }
     
     // Char ROM
@@ -428,11 +432,15 @@
     }
     
     // C1541 aka Floppy ROM
-    NSString *C1541ROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"1541-II.355640-01.bin"];
+    NSString *C1541ROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"JiffyDOS_C1541.bin"];
     if (!ROMFile::isVC1541RomFile(C1541ROM.UTF8String))
     {
-        NSLog(@"VirtualC64: %@ is not a valid C1541 ROM!", charROM);
-        return NO;
+         C1541ROM = [[self biosDirectoryPath] stringByAppendingPathComponent:@"1541-II.355640-01.bin"];
+           if (!ROMFile::isVC1541RomFile(C1541ROM.UTF8String))
+           {
+               NSLog(@"VirtualC64: %@ is not a valid C1541 ROM!", charROM);
+               return NO;
+           }
     }
     
     // Load Basic, Kernel, Char and C1541 Floppy ROMs
