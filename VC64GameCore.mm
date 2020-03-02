@@ -471,34 +471,43 @@
 - (void) _loadGame:(NSString *)fileExtension
 {
     isGameLoading = true;
-    
-    auto archive = AnyArchive::makeWithFile(_fileToLoad.UTF8String);
-    if (archive != nullptr) {
-        if (archive->numberOfItems() == 1) {
-            // flashing directly to memory is likely to work
-            c64->flash(archive, 0);
-        } else {
+   
+    if (CRTFile::isCRTFile(_fileToLoad.UTF8String)) {
+           _didRUN = true;
+          c64->expansionport.attachCartridgeAndReset( CRTFile::makeWithFile(_fileToLoad.UTF8String));
+
+    }else if (TAPFile::isTAPFile(_fileToLoad.UTF8String)) {
+        c64->datasette.insertTape(TAPFile::makeWithFile(_fileToLoad.UTF8String));
+        usleep(300000);
+       
+        isStillTyping = YES;
+         [_kbd typeWithString:@"LOAD\n" initialDelay:0 completion:^{
+             self->isStillTyping = NO;
+             c64->datasette.pressPlay();
+         }];
+    } else {
+        auto archive = AnyArchive::makeWithFile(_fileToLoad.UTF8String);
+        if (archive != nullptr) {
             switch (archive->type()) {
-                case D64_FILE:
-                    [self typeText:@"load \"*\",8,1\n" withDelay:1000];
-                    break;
-                case TAP_FILE: {
-                    c64->datasette.insertTape(dynamic_cast<TAPFile *>(archive));
-                    [self typeText:@"load\n" withDelay:10000];
-                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{usleep(400000);c64->datasette.pressPlay();});
+                case G64_FILE:
+                case D64_FILE: {
+                    c64->drive1.prepareToInsert();
+                    usleep(300000);
+                    c64->drive1.insertDisk(archive);
+                    [self typeText:@"load \"*\",8,1\n" withDelay:500];
+
                     break;
                 }
-                case CRT_FILE:
-                    _didRUN = true;
-                    c64->expansionport.attachCartridgeAndReset(dynamic_cast<CRTFile *>(archive));
-                    break;
-                    
+                case T64_FILE:
+                case P00_FILE:
                 default:
+                    c64->flash(archive, 0);
+                    
                     break;
             }
         }
     }
-
+    
     isGameLoading   = false;
     isGameLoaded    = true;
 }
