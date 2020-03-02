@@ -41,6 +41,7 @@
     C64 *c64;
     C64Proxy *_proxy;
     KeyboardController *_kbd;
+    BOOL                _isJoystickPortSwapped;
     NSString *_fileToLoad;
     float    *_soundBuffer;
     uint32_t *_videoBuffer;
@@ -348,8 +349,8 @@
 {
     ControlPort *port;
     switch (player) {
-        case 1: port = &c64->port1; break;
-        case 2: port = &c64->port2; break;
+        case 1:port = _isJoystickPortSwapped ?  &c64->port1:  &c64->port2;
+        case 2:port = _isJoystickPortSwapped ?  &c64->port2 :  &c64->port1;
         default: return;
     }
     
@@ -364,12 +365,13 @@
 - (oneway void)didReleaseC64Button:(OEC64Button)button forPlayer:(NSUInteger)player;
 {
     ControlPort *port;
+    
     switch (player) {
-        case 1: port = &c64->port1; break;
-        case 2: port = &c64->port2; break;
+        case 1:port = _isJoystickPortSwapped ?  &c64->port1:  &c64->port2;
+        case 2:port = _isJoystickPortSwapped ?  &c64->port2 :  &c64->port1;
         default: return;
     }
-
+    
     switch (button) {
         case OEC64JoystickUp:
         case OEC64JoystickDown:
@@ -391,9 +393,9 @@
 }
 
 - (oneway void)swapJoysticks {
-    
+    // do port swap
+       _isJoystickPortSwapped = !_isJoystickPortSwapped;
 }
-
 
 #pragma mark - Misc & Helpers
 
